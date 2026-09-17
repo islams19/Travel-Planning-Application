@@ -1,0 +1,5 @@
+{
+  "name": "TravelPlanning.UI",
+  "rootNamespace": "TravelPlanning.UI",
+  "references": ["TravelPlanning.Core", "Unity.TextMeshPro", "Unity.ugui", "Unity.InputSystem"]
+}

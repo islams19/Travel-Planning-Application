@@ -104,3 +104,8 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Local account data must stay on each user's computer.
+accounts.db
+accounts-log.db
+accounts-temp.db

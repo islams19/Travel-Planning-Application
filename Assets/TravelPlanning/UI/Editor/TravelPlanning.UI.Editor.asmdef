@@ -1,0 +1,6 @@
+{
+  "name": "TravelPlanning.UI.Editor",
+  "rootNamespace": "TravelPlanning.UI.Editor",
+  "references": ["TravelPlanning.UI", "Unity.TextMeshPro", "Unity.ugui", "Unity.InputSystem"],
+  "includePlatforms": ["Editor"]
+}
