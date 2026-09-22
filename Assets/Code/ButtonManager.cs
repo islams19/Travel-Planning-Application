@@ -24,6 +24,10 @@ public class ButtonManager : MonoBehaviour
             case "LoginButton":
                 Debug.Log("LOGGING IN");
                 break;
+            
+            case "QuitButton":
+                Debug.Log("QUITTING APPLICATION");
+                break;
 
             default:
                 Debug.LogWarning("No action assigned for: " + buttonName);
