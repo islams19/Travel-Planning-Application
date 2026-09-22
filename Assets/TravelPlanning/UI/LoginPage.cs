@@ -10,6 +10,7 @@ namespace TravelPlanning.UI
     /// <summary>The bridge: takes text from Unity's form and displays the account service's answer.</summary>
     public sealed class LoginPage : MonoBehaviour
     {
+        // The email address is also the username; keep one field for both forms.
         [SerializeField] private TMP_InputField emailField;
         [SerializeField] private TMP_InputField passwordField;
         [SerializeField] private TMP_InputField confirmationField;
@@ -91,6 +92,7 @@ namespace TravelPlanning.UI
                 return;
             if (result.Success)
             {
+                emailField.text = result.Email;
                 registering = false;
                 ShowForm();
             }
@@ -101,6 +103,8 @@ namespace TravelPlanning.UI
 
         private void SwitchForm()
         {
+            if (busy)
+                return;
             registering = !registering;
             passwordField.text = "";
             confirmationField.text = "";
@@ -118,7 +122,9 @@ namespace TravelPlanning.UI
         private void ShowForm()
         {
             bool signedIn = service.SignedInEmail != null;
-            heading.text = signedIn ? "Welcome" : registering ? "Create an account" : "Welcome back";
+            heading.text = signedIn ? "Welcome" : registering ? "Create an account" : "Login";
+            ((TMP_Text)emailField.placeholder).text = registering ? "Email address" : "Username (email address)";
+            ((TMP_Text)passwordField.placeholder).text = registering ? "Password (8-128 characters)" : "Password";
             emailField.gameObject.SetActive(!signedIn);
             passwordField.gameObject.SetActive(!signedIn);
             confirmationField.gameObject.SetActive(!signedIn && registering);
@@ -126,7 +132,7 @@ namespace TravelPlanning.UI
             switchButton.gameObject.SetActive(!signedIn);
             logoutButton.gameObject.SetActive(signedIn);
             submitLabel.text = registering ? "Create account" : "Log in";
-            switchLabel.text = registering ? "Already registered? Log in" : "New here? Create an account";
+            switchLabel.text = registering ? "Back to login" : "Create an account";
         }
 
         private void SetInteractable(bool value)

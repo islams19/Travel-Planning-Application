@@ -51,13 +51,13 @@ namespace TravelPlanning.UI.Editor
             layout.childForceExpandHeight = false;
 
             Text(form.transform, "Brand", "TRAVEL PLANNER", 20, 32);
-            var heading = Text(form.transform, "Heading", "Welcome back", 30, 48);
-            Text(form.transform, "LocalNote", "Your account stays on this computer.", 17, 32);
-            var email = Input(form.transform, "Email", "Email address", false);
-            var password = Input(form.transform, "Password", "Password (8-128 characters)", true);
+            var heading = Text(form.transform, "Heading", "Login", 30, 48);
+            Text(form.transform, "LocalNote", "Use your email address as your username.", 17, 32);
+            var email = Input(form.transform, "Email", "Username (email address)", false);
+            var password = Input(form.transform, "Password", "Password", true);
             var confirmation = Input(form.transform, "Confirmation", "Confirm password", true);
             var submit = Button(form.transform, "Submit", "Log in");
-            var switchForm = Button(form.transform, "SwitchForm", "New here? Create an account");
+            var switchForm = Button(form.transform, "SwitchForm", "Create an account");
             var feedback = Text(form.transform, "Feedback", "", 18, 78);
             var logout = Button(form.transform, "Logout", "Log out");
 

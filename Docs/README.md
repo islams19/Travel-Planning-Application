@@ -2,6 +2,16 @@
 
 A **class** is a named piece of code with a specific job. Keeping jobs separate lets your team change the appearance of the screen without changing how accounts are saved.
 
+## Login and Create an account
+
+The email address is the username. The login form shows **Username (email address)**, **Password**, **Log in**, and **Create an account**.
+
+Selecting **Create an account** switches to a registration form with **Email address**, **Password**, **Confirm password**, **Create account**, and **Back to login**. Registration still prevents duplicate emails and requires matching passwords. After creating an account, the form returns to login with the email filled in and password fields cleared. An invalid registration stays on the registration form and displays the error.
+
+`LoginPage` switches between these two views and sends the values to `AccountService`. `LoginPageSetup` creates the fields and buttons and connects them to `LoginPage`. The backend still saves plain-text passwords locally in LiteDB.
+
+In Unity, use **Travel Planning > Create Login Scene** to generate the updated layout, then press Play. If a previous generated scene exists, this command saves a new scene without overwriting the old one. No separate Git branch is required; this work stays on `DuyEdit`.
+
 ## Our database: LiteDB
 
 We use **LiteDB 5.0.21**, a local document database. Think of it as a filing cabinet stored in one file called `accounts.db`. Each account is one record in its `accounts` collection. It needs no internet connection or database server. The library is bundled with this project.
