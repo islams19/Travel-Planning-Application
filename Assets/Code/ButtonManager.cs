@@ -22,7 +22,7 @@ public class ButtonManager : MonoBehaviour
         switch (buttonName)
         {
             case "LoginButton":
-                Login();
+                Debug.Log("LOGGING IN");
                 break;
 
             default:
