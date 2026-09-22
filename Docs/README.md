@@ -6,13 +6,13 @@ A **class** is a named piece of code with a specific job. Keeping jobs separate 
 
 We use **LiteDB 5.0.21**, a local document database. Think of it as a filing cabinet stored in one file called `accounts.db`. Each account is one record in its `accounts` collection. It needs no internet connection or database server. The library is bundled with this project.
 
-The records contain an ID, email address, password hash, random salt, and password-hashing iteration count. A **hash** is a one-way fingerprint used to check a password. A **salt** is random data mixed into each password before hashing, so two people choosing the same password still get different stored fingerprints. The typed password and confirmation are never saved.
+The records contain an ID, email address, and password stored as readable text. The confirmation field is checked during registration but is not saved.
 
 Unity puts the database inside `Application.persistentDataPath`, its folder for data that should survive closing the application. In a Windows player this is normally under `%USERPROFILE%/AppData/LocalLow/<CompanyName>/<ProductName>`. Keep company/product settings stable so the app continues finding the same file. The current database is local to that computer and OS user: registering on one computer does not register on another.
 
 Email matching removes spaces at the beginning/end and ignores capitalization. `Duy@Example.com` and ` duy@example.com ` therefore become `duy@example.com`. A **unique index** is a database rule that prevents a second record with the same email. This rule still applies if two registrations happen together. Email spelling is checked, but email ownership is not verified because this application is offline. Provider-specific aliases such as `name+tag@example.com` remain distinct addresses.
 
-The file is not encrypted. Password hashing protects stored passwords from being directly readable; a local login is not protection against someone who controls or edits files on the computer. Only one copy of the application should open this file at a time.
+The file is not encrypted, and anyone who can read the database can read the passwords. Only one copy of the application should open this file at a time.
 
 Sources: [LiteDB overview](https://www.litedb.org/), [indexes](https://www.litedb.org/docs/indexes/), [Unity persistentDataPath](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Application-persistentDataPath.html).
 
@@ -30,19 +30,13 @@ File: `Assets/TravelPlanning/Runtime/Accounts/AccountService.cs`.
 
 This class handles the actual account rules. `Register` checks the email, requires an 8-128-character password, checks that both password fields match, and asks the database to save the account. It returns a friendly message if the email already exists. Creating an account does not automatically log the user in.
 
-`Login` looks up the email and checks the password fingerprint. On success, `SignedInEmail` remembers who is currently logged in. `Logout` clears that information. This session exists only in memory; restarting the app requires logging in again. A failed login also clears a previous session. Passwords are case-sensitive and are not trimmed.
-
-### PasswordHasher — the fingerprint maker
-
-File: `Assets/TravelPlanning/Runtime/Accounts/PasswordHasher.cs`.
-
-It creates the random salt, calculates a password fingerprint using PBKDF2-SHA256 with 600,000 iterations, and compares fingerprints when someone logs in. The deliberate extra calculation makes password guessing more expensive. This class is internal: the frontend never needs to call it.
+`Login` looks up the email and compares the entered password with the saved password. On success, `SignedInEmail` remembers who is currently logged in. `Logout` clears that information. This session exists only in memory; restarting the app requires logging in again. A failed login also clears a previous session. Passwords are case-sensitive and are not trimmed.
 
 ### AccountResult — the answer slip
 
 File: `Assets/TravelPlanning/Runtime/Accounts/AccountResult.cs`.
 
-After registration or login, this small object carries three answers: `Success` says whether it worked, `Message` contains text to show on screen, and `Email` contains the normalized email on success. It never carries a password or hash. Expected mistakes, such as a duplicate email, are returned as results rather than crashing the program.
+After registration or login, this small object carries three answers: `Success` says whether it worked, `Message` contains text to show on screen, and `Email` contains the normalized email on success. It never carries a password. Expected mistakes, such as a duplicate email, are returned as results rather than crashing the program.
 
 ### LoginPage — the bridge to Unity
 
@@ -50,7 +44,7 @@ File: `Assets/TravelPlanning/UI/LoginPage.cs`.
 
 This is a Unity **MonoBehaviour**, which means it can be attached to an object in a scene. It reads the text fields, calls AccountService, and shows the result. It switches between login, registration, and the signed-in welcome state. Password fields are masked and cleared after submission. Buttons temporarily disable during submission to prevent repeated clicks.
 
-Password checking runs in the background so Unity can keep drawing the screen. The code returns to Unity's main thread before changing UI elements. When the scene closes, the database is closed after any in-progress request finishes.
+Database work runs in the background so Unity can keep drawing the screen. The code returns to Unity's main thread before changing UI elements. When the scene closes, the database is closed after any in-progress request finishes.
 
 After a successful login it announces `LoggedIn`, an **event** other code can listen for. Your team's future dashboard can respond to that event. No dashboard or automatic scene change is included in this milestone.
 
@@ -72,7 +66,7 @@ These tests create temporary databases to check duplicate registration, persiste
 
 1. The user types an email and password into the Unity form.
 2. LoginPage sends those values to AccountService.
-3. AccountService checks the values and uses PasswordHasher.
+3. AccountService checks the values and compares passwords directly during login.
 4. AccountDatabase saves or finds the record in `accounts.db`.
 5. AccountService returns an AccountResult.
 6. LoginPage displays its message and, after successful login, shows the welcome state.
@@ -91,9 +85,9 @@ The generated scene is not added to build settings automatically. When the team 
 
 ## Testing status
 
-Run **Window > General > Test Runner > EditMode** to test inside Unity. The Windows fallback is `powershell -ExecutionPolicy Bypass -File tools/Test-Core.ps1`. It compiles the actual backend/test files and invokes the synchronous NUnit test methods using Unity's bundled compiler and Mono, without opening the Editor. It is a small runner for these tests, not a replacement for all NUnit/Unity lifecycle features.
+Run **Window > General > Test Runner > EditMode** to test inside Unity. The latest account validation used a temporary runner under Temp/CoreTests to compile the account code and invoke its NUnit tests without opening the Editor.
 
-The fallback passed **21 cases: 10 trip cases and 11 account cases**. Unity import was attempted but the installed Editor is missing `Data/Resources/PackageManager/Server/UnityPackageManager.exe`. Consequently, the scene builder, visual layout, button interactions, and player builds have not been verified in Unity. Use a complete Unity installation to perform the screen checks above; the actual login scene has not yet been generated here.
+On September 22, 2026, the account code compiled and **all 13 account test cases passed** using Unity's bundled C# compiler and Mono with a temporary NUnit runner. Unity import was attempted but the installed Editor is missing `Data/Resources/PackageManager/Server/UnityPackageManager.exe`. Consequently, the scene builder, visual layout, button interactions, and player builds have not been verified in Unity. Use a complete Unity installation to perform the screen checks above; the actual login scene has not yet been generated here.
 
 ## Earlier classes already in the project
 
@@ -104,3 +98,7 @@ The fallback passed **21 cases: 10 trip cases and 11 account cases**. Unity impo
 - **CoreTestRunner**: generated temporarily by `tools/Test-Core.ps1`; runs the test methods and counts passes/failures outside Unity. It is development tooling, not part of the application.
 
 Preset flights and prices are the next data milestone. No external flight service or live pricing is needed.
+
+## Password storage update
+
+Each account stores only its ID, email, and readable password text. Login compares that text exactly, preserving capitalization and spaces. Records without a text password cannot log in, but their emails remain reserved. Use a different email for a new test account; existing records are not deleted automatically.

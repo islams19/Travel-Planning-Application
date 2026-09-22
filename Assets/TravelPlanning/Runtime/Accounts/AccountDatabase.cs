@@ -19,12 +19,12 @@ namespace TravelPlanning.Accounts
             database = new LiteDatabase(new ConnectionString { Filename = fullPath });
             try
             {
-                if (database.UserVersion > 1)
+                if (database.UserVersion > 2)
                     throw new InvalidDataException("This account database belongs to a newer application version.");
                 accounts = database.GetCollection<BsonDocument>("accounts");
                 // The database itself refuses duplicates, including simultaneous insert attempts.
                 accounts.EnsureIndex("email", true);
-                database.UserVersion = 1;
+                database.UserVersion = 2;
             }
             catch
             {
@@ -33,7 +33,7 @@ namespace TravelPlanning.Accounts
             }
         }
 
-        internal bool Insert(string email, byte[] salt, byte[] passwordHash)
+        internal bool Insert(string email, string password)
         {
             try
             {
@@ -41,9 +41,7 @@ namespace TravelPlanning.Accounts
                 {
                     ["_id"] = Guid.NewGuid(),
                     ["email"] = email,
-                    ["salt"] = salt,
-                    ["passwordHash"] = passwordHash,
-                    ["iterations"] = PasswordHasher.Iterations
+                    ["password"] = password
                 });
                 return true;
             }

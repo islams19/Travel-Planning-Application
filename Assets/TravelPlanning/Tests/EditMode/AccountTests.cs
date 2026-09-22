@@ -114,7 +114,7 @@ namespace TravelPlanning.Tests
         }
 
         [Test]
-        public void PasswordsAreSaltedAndStoredAsHashes()
+        public void PasswordsAreStoredAsText()
         {
             WithDatabase(path =>
             {
@@ -129,10 +129,9 @@ namespace TravelPlanning.Tests
                     var records = database.GetCollection("accounts");
                     var first = records.FindOne(Query.EQ("email", "first@example.com"));
                     var second = records.FindOne(Query.EQ("email", "second@example.com"));
-                    Assert.That(first.ContainsKey("password"), Is.False);
-                    Assert.That(first["passwordHash"].AsBinary.Length, Is.EqualTo(32));
-                    Assert.That(first["salt"].AsBinary, Is.Not.EqualTo(second["salt"].AsBinary));
-                    Assert.That(first["passwordHash"].AsBinary, Is.Not.EqualTo(second["passwordHash"].AsBinary));
+                    Assert.That(first["password"].AsString, Is.EqualTo(Password));
+                    Assert.That(second["password"].AsString, Is.EqualTo(Password));
+                    Assert.That(first.Keys, Is.EquivalentTo(new[] { "_id", "email", "password" }));
                 }
             });
         }
@@ -148,6 +147,48 @@ namespace TravelPlanning.Tests
                     var records = database.GetCollection("accounts");
                     records.Insert(new BsonDocument { ["email"] = "duy@example.com" });
                     Assert.Throws<LiteException>(() => records.Insert(new BsonDocument { ["email"] = "duy@example.com" }));
+                }
+            });
+        }
+
+        [Test]
+        public void PasswordComparisonPreservesCaseAndSpaces()
+        {
+            WithDatabase(path =>
+            {
+                using (var database = new AccountDatabase(path))
+                {
+                    var service = new AccountService(database);
+                    const string password = " My Password ";
+                    Assert.That(service.Register("duy@example.com", password, password).Success, Is.True);
+                    Assert.That(service.Login("duy@example.com", password.ToLowerInvariant()).Success, Is.False);
+                    Assert.That(service.Login("duy@example.com", password.Trim()).Success, Is.False);
+                    Assert.That(service.Login("duy@example.com", password).Success, Is.True);
+                }
+            });
+        }
+
+        [Test]
+        public void AccountsWithoutPasswordsCannotLoginOrReuseEmail()
+        {
+            WithDatabase(path =>
+            {
+                using (var database = new LiteDatabase(path))
+                {
+                    database.UserVersion = 1;
+                    database.GetCollection("accounts").Insert(new BsonDocument
+                    {
+                        ["email"] = "old@example.com"
+                    });
+                }
+                using (var database = new AccountDatabase(path))
+                {
+                    var service = new AccountService(database);
+                    var result = service.Login("old@example.com", Password);
+                    Assert.That(result.Success, Is.False);
+                    Assert.That(result.Message, Is.EqualTo("Email or password is incorrect."));
+                    Assert.That(service.SignedInEmail, Is.Null);
+                    Assert.That(service.Register("old@example.com", Password, Password).Success, Is.False);
                 }
             });
         }

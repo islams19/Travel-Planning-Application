@@ -25,9 +25,7 @@ namespace TravelPlanning.Accounts
             if (!string.Equals(password, confirmation, StringComparison.Ordinal))
                 return new AccountResult(false, "The passwords do not match.");
 
-            byte[] salt = PasswordHasher.NewSalt();
-            byte[] hash = PasswordHasher.Hash(password, salt, PasswordHasher.Iterations);
-            if (!database.Insert(normalized, salt, hash))
+            if (!database.Insert(normalized, password))
                 return new AccountResult(false, "An account with this email already exists. Please log in.");
 
             // Registration does not sign in automatically; the user returns to the login form.
@@ -41,11 +39,11 @@ namespace TravelPlanning.Accounts
             if (normalized == null || string.IsNullOrEmpty(password) || password.Length > 128)
                 return InvalidLogin();
             var account = database.Find(normalized);
-            if (account == null)
+            if (account == null || !account["password"].IsString)
                 return InvalidLogin();
 
-            byte[] actual = PasswordHasher.Hash(password, account["salt"].AsBinary, account["iterations"].AsInt32);
-            if (!PasswordHasher.Matches(account["passwordHash"].AsBinary, actual))
+            // Compare the saved text exactly, including capitalization and spaces.
+            if (!string.Equals(account["password"].AsString, password, StringComparison.Ordinal))
                 return InvalidLogin();
 
             SignedInEmail = normalized;

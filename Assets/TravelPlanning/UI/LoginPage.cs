@@ -64,7 +64,7 @@ namespace TravelPlanning.UI
             AccountResult result;
             try
             {
-                // Password hashing takes time. Keep it off Unity's main thread so the form stays responsive.
+                // Keep database work off Unity's main thread so the form stays responsive.
                 result = await Task.Run(() => isRegistration
                     ? service.Register(email, password, confirmation)
                     : service.Login(email, password));
