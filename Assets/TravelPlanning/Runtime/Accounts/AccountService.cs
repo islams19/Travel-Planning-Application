@@ -1,82 +1,55 @@
 using System;
-using System.Net.Mail;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace TravelPlanning.Accounts
 {
-    /// <summary>The receptionist: checks the form, registers accounts, and verifies login details.</summary>
+    /// <summary>The UI entry point. Each account action has one job and shares the same session.</summary>
     public sealed class AccountService
     {
-        private readonly AccountDatabase database;
-
-        public string SignedInEmail { get; private set; }
+        private readonly AccountSession session = new AccountSession();
+        private readonly RegisterAccountAction register;
+        private readonly LoginAccountAction login;
+        public string SignedInEmail => session.Email;
+        public string SignedInUserId => session.UserId;
 
         public AccountService(AccountDatabase database)
         {
-            this.database = database ?? throw new ArgumentNullException(nameof(database));
+            if (database == null)
+            {
+                throw new ArgumentNullException(nameof(database));
+            }
+
+            register = new RegisterAccountAction(database);
+            login = new LoginAccountAction(database, session);
         }
 
-        public AccountResult Register(string email, string password, string confirmation)
+#region Register account
+        public Task<AccountResult> RegisterAsync(
+            string email,
+            string password,
+            string confirmation,
+            CancellationToken cancellationToken = default)
         {
-            string normalized = NormalizeEmail(email);
-            if (normalized == null)
-                return new AccountResult(false, "Enter a valid email address, such as name@example.com.");
-            if (string.IsNullOrWhiteSpace(password) || password.Length < 8 || password.Length > 128)
-                return new AccountResult(false, "Use a password with 8 to 128 characters.");
-            if (!string.Equals(password, confirmation, StringComparison.Ordinal))
-                return new AccountResult(false, "The passwords do not match.");
-
-            if (!database.Insert(normalized, password))
-                return new AccountResult(false, "An account with this email already exists. Please log in.");
-
-            // Registration does not sign in automatically; the user returns to the login form.
-            return new AccountResult(true, "Account created. You can now log in.", normalized);
+            return register.ExecuteAsync(email, password, confirmation, cancellationToken);
         }
 
-        public AccountResult Login(string email, string password)
+#endregion
+#region Log in
+        public Task<AccountResult> LoginAsync(
+            string email,
+            string password,
+            CancellationToken cancellationToken = default)
         {
-            SignedInEmail = null;
-            string normalized = NormalizeEmail(email);
-            if (normalized == null || string.IsNullOrEmpty(password) || password.Length > 128)
-                return InvalidLogin();
-            var account = database.Find(normalized);
-            if (account == null || !account["password"].IsString)
-                return InvalidLogin();
-
-            // Compare the saved text exactly, including capitalization and spaces.
-            if (!string.Equals(account["password"].AsString, password, StringComparison.Ordinal))
-                return InvalidLogin();
-
-            SignedInEmail = normalized;
-            return new AccountResult(true, "You are logged in.", normalized);
+            return login.ExecuteAsync(email, password, cancellationToken);
         }
 
+#endregion
+#region Log out
         public void Logout()
         {
-            SignedInEmail = null;
+            session.Logout();
         }
-
-        private static AccountResult InvalidLogin()
-        {
-            return new AccountResult(false, "Email or password is incorrect.");
-        }
-
-        private static string NormalizeEmail(string email)
-        {
-            if (string.IsNullOrWhiteSpace(email))
-                return null;
-            string value = email.Trim().ToLowerInvariant();
-            if (value.Length > 254)
-                return null;
-            try
-            {
-                var parsed = new MailAddress(value);
-                // Accept a plain email only, not a display name such as 'Duy <duy@example.com>'.
-                return parsed.Address == value && parsed.Host.Contains(".") ? value : null;
-            }
-            catch (FormatException)
-            {
-                return null;
-            }
-        }
+#endregion
     }
 }

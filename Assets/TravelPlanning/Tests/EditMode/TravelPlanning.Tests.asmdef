@@ -1,0 +1,10 @@
+{
+  "name": "TravelPlanning.Tests",
+  "rootNamespace": "TravelPlanning.Tests",
+  "references": ["TravelPlanning.Core", "TravelPlanning.UI", "TravelPlanning.UI.Editor", "Unity.ugui", "Unity.TextMeshPro"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll", "LiteDB.dll", "SQLite-net.dll"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}
+

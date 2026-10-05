@@ -1,0 +1,21 @@
+root = true
+
+# These rules apply to the team's source, not imported Unity/plugin code.
+[Assets/TravelPlanning/**/*.cs]
+charset = utf-8
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+csharp_new_line_before_open_brace = all
+csharp_preserve_single_line_statements = false
+csharp_preserve_single_line_blocks = false
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+[tools/*.ps1]
+indent_style = space
+indent_size = 4
+insert_final_newline = true

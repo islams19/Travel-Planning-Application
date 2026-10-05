@@ -6,6 +6,36 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Login.unity
+    guid: 7d913960ecf5841f3815d39fe9b77bd5
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Registration.unity
+    guid: b4682b5fca8406147947893b8fbb6f2c
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Home.unity
+    guid: 18def8f64b8e6a345baee81617cc1c80
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Flights.unity
+    guid: aeb536552a1380344a521096490420f2
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Destinations.unity
+    guid: f89a41f468e8d8842987a95ab83028a9
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Reviews.unity
+    guid: 3dce47ee68b65ff45bcd123d9f9d69b9
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/SavedTrips.unity
+    guid: 73c80ed217d8df9419e32e3ca3c9e15e
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/Notifications.unity
+    guid: 5cf820aacdb88af4cad6cccdda8dfc63
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/SqliteProof.unity
+    guid: d012ef1eb82ed60478636f6830f61bc6
+  - enabled: 1
+    path: Assets/TravelPlanning/Scenes/TravelDatabase.unity
+    guid: 7b2906095deff504dbba3ea2fe68785d
+  - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
   m_configObjects:

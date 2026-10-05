@@ -1,5 +1,7 @@
 # Travel Planning Application — Explanation Guide
 
+> **Historical — superseded by Milestone 2.** This document describes the earlier LiteDB prototype and insecure plaintext password behavior. Do not use it as current setup or security guidance. See [the current guide](README.md) and [SQLite authentication](Milestone-2-Authentication.md). The original body is preserved below as project history.
+
 ## Our database: LiteDB
 
 We use **LiteDB 5.0.21**, a local document database. Think of it as a filing cabinet stored in one file called `accounts.db`. Each account is one record in its `accounts` collection. It needs no internet connection or database server. The library is bundled with this project.

@@ -1,4 +1,14 @@
 # This .gitignore file should be placed at the root of your Unity project directory
+
+# Local runtime data and isolated QA fixtures; keep travel_seed.db versioned.
+travel.db
+travel.db-journal
+travel.db-wal
+travel.db-shm
+auth-smoke-*.db
+auth-smoke-*.db-journal
+auth-smoke-*.db-wal
+auth-smoke-*.db-shm
 #
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
 #

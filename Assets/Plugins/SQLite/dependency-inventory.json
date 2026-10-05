@@ -1,0 +1,38 @@
+[
+    {
+        "package":  "sqlite-net-pcl",
+        "version":  "1.11.285",
+        "source":  "https://api.nuget.org/v3-flatcontainer/sqlite-net-pcl/1.11.285/sqlite-net-pcl.1.11.285.nupkg",
+        "packageSha256":  "0589DC86602ADC062B9A89D3E712283CA489066EE507F3F1B0398407657C2550",
+        "packageEntry":  "lib/netstandard2.0/SQLite-net.dll",
+        "file":  "Managed/SQLite-net.dll",
+        "fileSha256":  "177C18F15DD8F93AD4CE9A17D398AB6E324A94C308216801428BD9192F4A5098"
+    },
+    {
+        "package":  "sqlitepclraw.core",
+        "version":  "3.0.3",
+        "source":  "https://api.nuget.org/v3-flatcontainer/sqlitepclraw.core/3.0.3/sqlitepclraw.core.3.0.3.nupkg",
+        "packageSha256":  "30BB8DECACDF856C955F78B8A62E79290A7D27C251F37B020AF79E52EB032AAC",
+        "packageEntry":  "lib/netstandard2.0/SQLitePCLRaw.core.dll",
+        "file":  "Managed/SQLitePCLRaw.core.dll",
+        "fileSha256":  "3C55CF9BA9784469375C625608AF772B85A352EC91723FE2A882532FDEB7CFC9"
+    },
+    {
+        "package":  "sqlitepclraw.provider.e_sqlite3",
+        "version":  "3.0.3",
+        "source":  "https://api.nuget.org/v3-flatcontainer/sqlitepclraw.provider.e_sqlite3/3.0.3/sqlitepclraw.provider.e_sqlite3.3.0.3.nupkg",
+        "packageSha256":  "6EB54FBBA60405B2AD7CAADFE4F57CB03659B269591602F92AC7BA14FD35B85D",
+        "packageEntry":  "lib/netstandard2.0/SQLitePCLRaw.provider.e_sqlite3.dll",
+        "file":  "Managed/SQLitePCLRaw.provider.e_sqlite3.dll",
+        "fileSha256":  "C97285EFF57DDFBC6418C4E1278E73F1703E902071CE59AF98318B010E0B39FF"
+    },
+    {
+        "package":  "sourcegear.sqlite3",
+        "version":  "3.53.3",
+        "source":  "https://api.nuget.org/v3-flatcontainer/sourcegear.sqlite3/3.53.3/sourcegear.sqlite3.3.53.3.nupkg",
+        "packageSha256":  "107F90869538E964DEDBAD9B74922FA04092ADB078DE4791F99709CA9ED9F050",
+        "packageEntry":  "runtimes/win-x64/native/e_sqlite3.dll",
+        "file":  "x86_64/e_sqlite3.dll",
+        "fileSha256":  "B7385D722C83FB52142A00477A726723745916D22A555711EE89834C1111FB2E"
+    }
+]

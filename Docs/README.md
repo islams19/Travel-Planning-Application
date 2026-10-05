@@ -1,114 +1,73 @@
-# Travel Planning Application — Explanation Guide
+# Travel Planning Application — Current Guide
 
-A **class** is a named piece of code with a specific job. Keeping jobs separate lets your team change the appearance of the screen without changing how accounts are saved.
+Unity **6000.3.24f1**, **2D** desktop screens, Windows x64, uGUI, legacy Input Manager, and a local SQLite database. Work in **DuyEdit** unless the team explicitly chooses another branch.
 
-## Login and Create an account
+## Current structure
 
-The email address is the username. The login form shows **Username (email address)**, **Password**, **Log in**, and **Create an account**.
+The code has been reorganized into separate models, actions, repositories, services, screen controllers and views. Shared parent classes handle database execution and screen-request cleanup. Start with [project structure and click-by-click editing instructions](Project-Structure-and-Editing.md). Unity Hub now lists this checkout as **CSIT 435**; use its `Documents\ChatGPT\CSIT 435` path.
 
-Selecting **Create an account** switches to a registration form with **Email address**, **Password**, **Confirm password**, **Create account**, and **Back to login**. Registration still prevents duplicate emails and requires matching passwords. After creating an account, the form returns to login with the email filled in and password fields cleared. An invalid registration stays on the registration form and displays the error.
+Each application page has its own `.unity` file under `Assets/TravelPlanning/Scenes`, including **Login.unity**, the startup scene. Start with [separate page scenes and exact paths](Separate-Page-Scenes.md). **Travel Planning > Open Editable Project** opens the selected page scene for editing. The runtime connects the page scenes while retaining the account session. See [refactor validation](Refactor-Validation.md) for the earlier single-scene checkpoint; the separate-scene validation is recorded independently. Current `.cs` files are authoritative; older full-script documents below are historical snapshots.
 
-`LoginPage` switches between these two views and sends the values to `AccountService`. `LoginPageSetup` creates the fields and buttons and connects them to `LoginPage`. The backend still saves plain-text passwords locally in LiteDB.
+## Milestone checkpoint before the refactor
 
-In Unity, use **Travel Planning > Create Login Scene** to generate the updated layout, then press Play. If a previous generated scene exists, this command saves a new scene without overwriting the old one. No separate Git branch is required; this work stays on `DuyEdit`.
+[Milestone 8: desktop polish and release checks](Milestone-8-Polish.md) is implemented with **153/153 automated tests, 12/12 development-player scenarios and 9/9 release-player checks passed** on 2026-09-29. All 36 screenshots were inspected across four actual window sizes. See [validation evidence and remaining manual acceptance](Milestone-8-Validation.md), [complete scripts](Milestone-8-Full-Scripts.md), and [starting inspection](Milestone-8-Inspection.md).
 
-## Our database: LiteDB
+Run `Builds/TravelPlannerRelease/TravelPlanner.exe` for the normal Windows app; keep its entire build folder together. Use `Builds/TravelPlannerDevelopment/TravelPlannerDevelopment.exe` for the price-change demonstration. These local build artifacts are ignored by Git. Physical mouse/keyboard use, default-browser opening, drag-resizing/DPI and clean-machine testing remain manual. Work remains uncommitted on **DuyEdit**. The planned eight milestones stop here for team acceptance.
 
-We use **LiteDB 5.0.21**, a local document database. Think of it as a filing cabinet stored in one file called `accounts.db`. Each account is one record in its `accounts` collection. It needs no internet connection or database server. The library is bundled with this project.
+[Milestone 7: price tracking and notifications](Milestone-7-PriceTracking.md) passed 137/137 automated tests and two Windows player scenarios at its checkpoint. See [validation evidence and limitations](Milestone-7-Validation.md), [full scripts](Milestone-7-Full-Scripts.md), and [inspection](Milestone-7-Inspection.md). M8 adds actual release-build and rendered validation.
 
-The records contain an ID, email address, and password stored as readable text. The confirmation field is checked during registration but is not saved.
+[Milestone 6: saved trips](Milestone-6-SavedTrips.md) passed 126/126 automated tests and two Windows player scenarios at its checkpoint. See [validation evidence and manual-check limitations](Milestone-6-Validation.md), [full scripts](Milestone-6-Full-Scripts.md), and [inspection](Milestone-6-Inspection.md).
 
-Unity puts the database inside `Application.persistentDataPath`, its folder for data that should survive closing the application. In a Windows player this is normally under `%USERPROFILE%/AppData/LocalLow/<CompanyName>/<ProductName>`. Keep company/product settings stable so the app continues finding the same file. The current database is local to that computer and OS user: registering on one computer does not register on another.
+[Milestone 5: ratings and traveler reviews](Milestone-5-Reviews.md) passed 115/115 automated tests and two Windows player scenarios at its checkpoint. See [validation evidence and manual-check limitations](Milestone-5-Validation.md), [full scripts](Milestone-5-Full-Scripts.md), and [inspection](Milestone-5-Inspection.md). Actual browser launch remains a manual check.
 
-Email matching removes spaces at the beginning/end and ignores capitalization. `Duy@Example.com` and ` duy@example.com ` therefore become `duy@example.com`. A **unique index** is a database rule that prevents a second record with the same email. This rule still applies if two registrations happen together. Email spelling is checked, but email ownership is not verified because this application is offline. Provider-specific aliases such as `name+tag@example.com` remain distinct addresses.
+[Milestone 4: destination hub](Milestone-4-DestinationHub.md) passed 69/69 automated tests and two Windows player scenarios at its checkpoint. See [validation evidence and visual-check limitations](Milestone-4-Validation.md), [full scripts](Milestone-4-Full-Scripts.md), and [inspection](Milestone-4-Inspection.md).
 
-The file is not encrypted, and anyone who can read the database can read the passwords. Only one copy of the application should open this file at a time.
+[Milestone 3: flight search](Milestone-3-FlightSearch.md) is implemented and validated with 56 passing tests and two Windows player runs. See [complete scripts](Milestone-3-Full-Scripts.md), [validation and limitations](Milestone-3-Validation.md), and [inspection](Milestone-3-Inspection.md).
 
-Sources: [LiteDB overview](https://www.litedb.org/), [indexes](https://www.litedb.org/docs/indexes/), [Unity persistentDataPath](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Application-persistentDataPath.html).
+[Milestone 2: authentication](Milestone-2-Authentication.md) describes the SQLite registration, login, and logout work. [Kevin login inspection](Milestone-2-Login-Inspection.md) records the original scene, asset references, and visual preservation boundaries. Follow the milestone's validation report for what was actually tested; this index does not claim that validation has finished.
 
-## What each class does
+The app uses the `travel.db` schema introduced in Milestone 1B. Authentication work replaces the earlier plaintext LiteDB implementation. Existing `accounts.db` files are historical local data: they are not migrated, opened, or deleted by the new login flow. Register a fresh SQLite account.
 
-### AccountDatabase — the filing cabinet
+## Guides and evidence
 
-File: `Assets/TravelPlanning/Runtime/Accounts/AccountDatabase.cs`.
+- [Editable application screens and visual refresh](Visual-Refresh.md)
+- [Visual refresh: final validation](Visual-Refresh-Validation.md)
+- [Separate page scenes: paths and editing instructions](Separate-Page-Scenes.md)
+- [Separate page scenes: current validation](Separate-Scenes-Validation.md)
+- [Milestone 8: desktop polish and team QA guide](Milestone-8-Polish.md)
+- [Milestone 8: full scripts snapshot](Milestone-8-Full-Scripts.md)
+- [Milestone 8: final validation and limitations](Milestone-8-Validation.md)
+- [Milestone 8: starting-point inspection](Milestone-8-Inspection.md)
+- [Milestone 7: price tracking guide](Milestone-7-PriceTracking.md)
+- [Milestone 7: full scripts snapshot](Milestone-7-Full-Scripts.md)
+- [Milestone 7: validation record](Milestone-7-Validation.md)
+- [Milestone 7: starting-point inspection](Milestone-7-Inspection.md)
+- [Milestone 6: saved trips guide](Milestone-6-SavedTrips.md)
+- [Milestone 6: full scripts snapshot](Milestone-6-Full-Scripts.md)
+- [Milestone 6: validation record](Milestone-6-Validation.md)
+- [Milestone 6: starting-point inspection](Milestone-6-Inspection.md)
+- [Milestone 5: reviews guide](Milestone-5-Reviews.md)
+- [Milestone 5: full scripts snapshot](Milestone-5-Full-Scripts.md)
+- [Milestone 5: validation record](Milestone-5-Validation.md)
+- [Milestone 5: starting-point inspection](Milestone-5-Inspection.md)
+- [Milestone 4: destination hub guide](Milestone-4-DestinationHub.md)
+- [Milestone 4: full scripts snapshot](Milestone-4-Full-Scripts.md)
+- [Milestone 4: validation record](Milestone-4-Validation.md)
+- [Milestone 4: starting-point inspection](Milestone-4-Inspection.md)
+- [Milestone 3: flight search guide](Milestone-3-FlightSearch.md)
+- [Milestone 3: starting-point inspection](Milestone-3-Inspection.md)
+- [Milestone 2: authentication guide](Milestone-2-Authentication.md)
+- [Milestone 1A: SQLite proof of concept](Milestone-1A-SQLite.md)
+- [Milestone 1A: validation record](Milestone-1A-Validation.md)
+- [Milestone 1A: full scripts snapshot](Milestone-1A-Full-Scripts.md)
+- [Milestone 1B: schema and seeded catalog](Milestone-1B-Database.md)
+- [Milestone 1B: validation record](Milestone-1B-Validation.md)
+- [Milestone 1B: full scripts snapshot](Milestone-1B-Full-Scripts.md)
+- [Editable catalog and data limitations](../Assets/TravelPlanning/SeedData/README.md)
+- [SQLite dependencies, versions, and import instructions](../Assets/Plugins/SQLite/README.md)
 
-It opens or creates the account file and sets the rule that emails cannot repeat. `Insert` saves a new record, and `Find` locates an account by email. `Dispose` closes the file when the application is finished using it. Storage errors are allowed to reach the screen so the application does not pretend an account was saved. It does not overwrite a damaged or newer-version database to make an error disappear.
+Milestone guides and full-script documents describe their own point in time. Current `.cs` files are authoritative if later milestones have changed them. Flight search and later screens follow authentication; the diagnostic scenes are not completed application screens.
 
-### AccountService — the receptionist
+## Historical material
 
-File: `Assets/TravelPlanning/Runtime/Accounts/AccountService.cs`.
-
-This class handles the actual account rules. `Register` checks the email, requires an 8-128-character password, checks that both password fields match, and asks the database to save the account. It returns a friendly message if the email already exists. Creating an account does not automatically log the user in.
-
-`Login` looks up the email and compares the entered password with the saved password. On success, `SignedInEmail` remembers who is currently logged in. `Logout` clears that information. This session exists only in memory; restarting the app requires logging in again. A failed login also clears a previous session. Passwords are case-sensitive and are not trimmed.
-
-### AccountResult — the answer slip
-
-File: `Assets/TravelPlanning/Runtime/Accounts/AccountResult.cs`.
-
-After registration or login, this small object carries three answers: `Success` says whether it worked, `Message` contains text to show on screen, and `Email` contains the normalized email on success. It never carries a password. Expected mistakes, such as a duplicate email, are returned as results rather than crashing the program.
-
-### LoginPage — the bridge to Unity
-
-File: `Assets/TravelPlanning/UI/LoginPage.cs`.
-
-This is a Unity **MonoBehaviour**, which means it can be attached to an object in a scene. It reads the text fields, calls AccountService, and shows the result. It switches between login, registration, and the signed-in welcome state. Password fields are masked and cleared after submission. Buttons temporarily disable during submission to prevent repeated clicks.
-
-Database work runs in the background so Unity can keep drawing the screen. The code returns to Unity's main thread before changing UI elements. When the scene closes, the database is closed after any in-progress request finishes.
-
-After a successful login it announces `LoggedIn`, an **event** other code can listen for. Your team's future dashboard can respond to that event. No dashboard or automatic scene change is included in this milestone.
-
-### LoginPageSetup — the form assembler
-
-File: `Assets/TravelPlanning/UI/Editor/LoginPageSetup.cs`.
-
-This editor-only helper adds **Travel Planning > Create Login Scene** to Unity's menu. It creates a Canvas (the surface holding the UI), text labels, email/password fields, buttons, and an EventSystem (what lets clicks reach the controls). It connects these controls to LoginPage and saves a separate scene. It asks Unity to handle unsaved scene changes and chooses a new filename if a login scene already exists.
-
-Your team can then change colors, positions, and labels in Unity's Inspector. The backend classes need no migration because they are already ordinary C# used by Unity. Only LoginPage and this helper know about Unity UI.
-
-### AccountTests — the automatic checker
-
-File: `Assets/TravelPlanning/Tests/EditMode/AccountTests.cs`.
-
-These tests create temporary databases to check duplicate registration, persistence after reopening, incorrect passwords, email validation, logout, and password storage. Tests never use the real application's account file. The temporary databases are removed after each test.
-
-## How the pieces work together
-
-1. The user types an email and password into the Unity form.
-2. LoginPage sends those values to AccountService.
-3. AccountService checks the values and compares passwords directly during login.
-4. AccountDatabase saves or finds the record in `accounts.db`.
-5. AccountService returns an AccountResult.
-6. LoginPage displays its message and, after successful login, shows the welcome state.
-
-## Trying the screen
-
-1. Open this repository with Unity **6000.3.24f1** and wait for package import/compilation.
-2. Import **TMP Essential Resources** from Unity's TextMeshPro menu if the default font is missing. These are the fonts/materials used by the form.
-3. Click **Travel Planning > Create Login Scene** and press Play.
-4. Create `duy@example.com` using a test password entered twice.
-5. Try creating `DUY@example.com` again. Registration should report that the account exists.
-6. Log in with the original password, log out, and try an incorrect password.
-7. Stop Play Mode and start again. The account should still work.
-
-The generated scene is not added to build settings automatically. When the team prepares a player build, add that scene to the active Build Profile's scene list and make it the first scene if login should appear first.
-
-## Testing status
-
-Run **Window > General > Test Runner > EditMode** to test inside Unity. The latest account validation used a temporary runner under Temp/CoreTests to compile the account code and invoke its NUnit tests without opening the Editor.
-
-On September 22, 2026, the account code compiled and **all 13 account test cases passed** using Unity's bundled C# compiler and Mono with a temporary NUnit runner. Unity import was attempted but the installed Editor is missing `Data/Resources/PackageManager/Server/UnityPackageManager.exe`. Consequently, the scene builder, visual layout, button interactions, and player builds have not been verified in Unity. Use a complete Unity installation to perform the screen checks above; the actual login scene has not yet been generated here.
-
-## Earlier classes already in the project
-
-- **Trip**: describes a trip, including destination and dates, and owns its list of activities.
-- **ItineraryItem**: describes one activity, including its title, day, and location.
-- **TripService**: keeps the current session's trips in memory. It does not yet save them or associate them with an account.
-- **TripTests**: checks the trip/date rules automatically.
-- **CoreTestRunner**: generated temporarily by `tools/Test-Core.ps1`; runs the test methods and counts passes/failures outside Unity. It is development tooling, not part of the application.
-
-Preset flights and prices are the next data milestone. No external flight service or live pricing is needed.
-
-## Password storage update
-
-Each account stores only its ID, email, and readable password text. Login compares that text exactly, preserving capitalization and spaces. Records without a text password cannot log in, but their emails remain reserved. Use a different email for a new test account; existing records are not deleted automatically.
+[Duy Explanation 9.17.26](Duy%20Explanation%209.17.26.md) describes the superseded LiteDB prototype, including insecure plaintext passwords. It is retained as project history, not current implementation or security guidance.

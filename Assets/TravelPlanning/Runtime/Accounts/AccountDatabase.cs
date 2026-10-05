@@ -1,65 +1,60 @@
 using System;
-using System.IO;
-using LiteDB;
+using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
+using SQLite;
+using TravelPlanning.Data;
 
 namespace TravelPlanning.Accounts
 {
-    /// <summary>The filing cabinet: opens the local file and reads/writes account records.</summary>
-    public sealed class AccountDatabase : IDisposable
+    /// <summary>Reads and writes accounts in the already initialized travel SQLite database.</summary>
+    public sealed class AccountDatabase : DatabaseServiceBase
     {
-        private readonly LiteDatabase database;
-        private readonly ILiteCollection<BsonDocument> accounts;
-
-        public AccountDatabase(string filePath)
+        public AccountDatabase(TravelDatabase database) : base(database)
         {
-            if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("A database file path is required.", nameof(filePath));
-            string fullPath = Path.GetFullPath(filePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
-            database = new LiteDatabase(new ConnectionString { Filename = fullPath });
-            try
-            {
-                if (database.UserVersion > 2)
-                    throw new InvalidDataException("This account database belongs to a newer application version.");
-                accounts = database.GetCollection<BsonDocument>("accounts");
-                // The database itself refuses duplicates, including simultaneous insert attempts.
-                accounts.EnsureIndex("email", true);
-                database.UserVersion = 2;
-            }
-            catch
-            {
-                database.Dispose();
-                throw;
-            }
         }
 
-        internal bool Insert(string email, string password)
+#region Find Async
+        internal Task<AccountRecord> FindAsync(string email, CancellationToken token)
         {
-            try
+            return base.ExecuteAsync(
+                connection => connection.FindWithQuery<AccountRecord>(
+                "SELECT id, email_normalized, password_hash, password_salt, password_iterations, " +
+                "password_algorithm FROM users WHERE email_normalized = ?",
+                email),
+                token);
+        }
+#endregion
+
+#region Insert Async
+        internal Task<bool> InsertAsync(AccountRecord account, CancellationToken token)
+        {
+            return base.ExecuteAsync(connection =>
             {
-                accounts.Insert(new BsonDocument
+                token.ThrowIfCancellationRequested();
+                try
                 {
-                    ["_id"] = Guid.NewGuid(),
-                    ["email"] = email,
-                    ["password"] = password
-                });
-                return true;
-            }
-            catch (LiteException error) when (error.ErrorCode == LiteException.INDEX_DUPLICATE_KEY)
-            {
-                return false;
-            }
+                    connection.Execute(
+                        "INSERT INTO users (id, email_normalized, password_hash, password_salt, password_iterations, " +
+                        "password_algorithm, created_utc) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        account.Id,
+                        account.Email,
+                        account.Hash,
+                        account.Salt,
+                        account.Iterations,
+                        account.Algorithm,
+                        DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+                    return true;
+                }
+                catch (SQLiteException error)when (error.Result == SQLite3.Result.Constraint)
+                {
+                    // Only a duplicate email is a normal form error; other database problems propagate.
+                    if (connection.ExecuteScalar<int>("SELECT COUNT(*) FROM users WHERE email_normalized = ?", account.Email) > 0)
+                        return false;
+                    throw;
+                }
+            }, token);
         }
-
-        internal BsonDocument Find(string email)
-        {
-            // Query values are passed as data, not joined into a database command.
-            return accounts.FindOne(Query.EQ("email", email));
-        }
-
-        public void Dispose()
-        {
-            database.Dispose();
-        }
+#endregion
     }
 }
