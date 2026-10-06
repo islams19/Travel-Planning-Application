@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class ButtonManager : MonoBehaviour
 {
@@ -22,11 +23,14 @@ public class ButtonManager : MonoBehaviour
         switch (buttonName)
         {
             case "LoginButton":
-                Debug.Log("LOGGING IN");
+                LoginManager.Instance.AttemptLogin();
+                if (LoginManager.Instance.IsLoggedIn()){
+                    SceneManager.LoadScene("HomeScreen");
+                }
                 break;
             
             case "QuitButton":
-                Debug.Log("QUITTING APPLICATION");
+                Application.Quit();
                 break;
 
             default:
