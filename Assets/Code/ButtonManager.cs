@@ -28,9 +28,29 @@ public class ButtonManager : MonoBehaviour
                     SceneManager.LoadScene("HomeScreen");
                 }
                 break;
+                
+            case "BookingButton":
+                LoadSceneIfLoggedIn("BookingScreen");
+                break;
+
+            case "AccountButton":
+                LoadSceneIfLoggedIn("AccountScreen");
+                break;
             
             case "QuitButton":
+            #if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+            #else
                 Application.Quit();
+            #endif
+                break;
+
+            case "SearchButton":
+                BookingManager.Instance.Search();
+                break;
+
+            case "ResetFiltersButton":
+                BookingManager.Instance.ResetFilters();
                 break;
 
             default:
@@ -43,4 +63,19 @@ public class ButtonManager : MonoBehaviour
     {
         Debug.Log("LOGIN ACTION");
     }
+
+    private void LoadSceneIfLoggedIn(string sceneName)
+    {
+        if (LoginManager.Instance != null &&
+            LoginManager.Instance.IsLoggedIn())
+        {
+            SceneManager.LoadScene(sceneName);
+        }
+        else
+        {
+            Debug.Log("User is not logged in.");
+            SceneManager.LoadScene("LoginScene");
+        }
+    }
+
 }
