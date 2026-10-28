@@ -12,9 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef013c2d4dac04a448bb6a7811e4e3f0, type: 3}
   m_Name: Snorkeling
   m_EditorClassIdentifier: Assembly-CSharp::Product
+  id: d805de1f0aae94124b46fd3b46950f1a
   productName: Snorkeling
   description: Come see the coral reef!
   productType: 3
+  productImage: {fileID: 0}
   location: Key Largo, Florida
   price: 54.99
   rating: 5

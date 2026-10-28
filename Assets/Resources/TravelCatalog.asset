@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7aff00c8e25014777bf48e459daa5a10, type: 3}
+  m_Name: TravelCatalog
+  m_EditorClassIdentifier: TravelApp.Runtime::TravelApp.TravelCatalog
+  products:
+  - {fileID: 11400000, guid: 9ec80f1612aba484f9a46725abc04ea1, type: 2}
+  - {fileID: 11400000, guid: b027d8436b3c442158d7c65530637695, type: 2}
+  - {fileID: 11400000, guid: b89a0733b60554a68875884e76e9704b, type: 2}
+  - {fileID: 11400000, guid: d805de1f0aae94124b46fd3b46950f1a, type: 2}
+  - {fileID: 11400000, guid: e11581b56c6e1464689436b0b3550fe7, type: 2}
+  - {fileID: 11400000, guid: eff43b05c18a14046b669c2dd8446054, type: 2}
+  users:
+  - {fileID: 11400000, guid: 06bd7363af1924d268f9275f2e8132cc, type: 2}
+  - {fileID: 11400000, guid: 27b959a16de974cf6b889e6093005828, type: 2}
+  - {fileID: 11400000, guid: 2834fead1f655411e94d2f00301f12f9, type: 2}
+  - {fileID: 11400000, guid: 5d745bfb332f14148baa243597c86387, type: 2}
+  - {fileID: 11400000, guid: 9db1218f104a74b0781cac7fb593ce8d, type: 2}

@@ -14,6 +14,9 @@ public enum ProductType
 )]
 public class Product : ScriptableObject
 {
+    [Tooltip("Stable ID assigned from the asset GUID by the catalog builder.")]
+    public string id;
+
     [Header("Basic Information")]
     public string productName;
 

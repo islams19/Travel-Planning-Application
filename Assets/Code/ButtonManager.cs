@@ -1,81 +1,31 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
-
+using TravelApp;
 public class ButtonManager : MonoBehaviour
 {
     public static ButtonManager Instance { get; private set; }
-
-    private void Awake()
-    {
-        if (Instance != null && Instance != this)
-        {
-            Debug.LogError("More than one ButtonManager exists in the scene.");
-            return;
-        }
-
-        Instance = this;
-    }
-
+    void Awake() { Instance = this; }
+    void OnDestroy() { if (Instance == this) Instance = null; }
+    // Compatibility adapter for existing named buttons. New UI uses direct callbacks.
     public void ButtonPressed(string buttonName)
     {
-        Debug.Log("Button Manager received: " + buttonName);
-
+        var runtime = TravelAppRuntime.Instance;
+        if (runtime?.Services == null) return;
         switch (buttonName)
         {
-            case "LoginButton":
-                LoginManager.Instance.AttemptLogin();
-                if (LoginManager.Instance.IsLoggedIn()){
-                    SceneManager.LoadScene("HomeScreen");
-                }
-                break;
-                
-            case "BookingButton":
-                LoadSceneIfLoggedIn("BookingScreen");
-                break;
-
-            case "AccountButton":
-                LoadSceneIfLoggedIn("AccountScreen");
-                break;
-            
+            case "LoginButton": if (LoginManager.Instance != null && LoginManager.Instance.AttemptLogin()) runtime.Navigate("HomeScreen"); break;
+            case "HomeButton": case "BackButton": runtime.Navigate("HomeScreen"); break;
+            case "BookingButton": runtime.Navigate("BookingScreen"); break;
+            case "AccountButton": runtime.Navigate("AccountScreen"); break;
+            case "LogoutButton": runtime.Services.Accounts.Logout(); runtime.Navigate("LoginScreen"); break;
+            case "SearchButton": BookingManager.Instance?.Search(); break;
+            case "ResetFiltersButton": BookingManager.Instance?.ResetFilters(); break;
             case "QuitButton":
-            #if UNITY_EDITOR
+#if UNITY_EDITOR
                 UnityEditor.EditorApplication.isPlaying = false;
-            #else
+#else
                 Application.Quit();
-            #endif
-                break;
-
-            case "SearchButton":
-                BookingManager.Instance.Search();
-                break;
-
-            case "ResetFiltersButton":
-                BookingManager.Instance.ResetFilters();
-                break;
-
-            default:
-                Debug.LogWarning("No action assigned for: " + buttonName);
+#endif
                 break;
         }
     }
-
-    private void Login()
-    {
-        Debug.Log("LOGIN ACTION");
-    }
-
-    private void LoadSceneIfLoggedIn(string sceneName)
-    {
-        if (LoginManager.Instance != null &&
-            LoginManager.Instance.IsLoggedIn())
-        {
-            SceneManager.LoadScene(sceneName);
-        }
-        else
-        {
-            Debug.Log("User is not logged in.");
-            SceneManager.LoadScene("LoginScene");
-        }
-    }
-
 }

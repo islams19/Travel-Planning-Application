@@ -12,10 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef013c2d4dac04a448bb6a7811e4e3f0, type: 3}
   m_Name: Trails End
   m_EditorClassIdentifier: Assembly-CSharp::Product
+  id: 9ec80f1612aba484f9a46725abc04ea1
   productName: Trails End
   description: 'Come eat at Disney''s Trails End Buffet in Fort Wilderness Resort
     & Campground '
   productType: 2
+  productImage: {fileID: 0}
   location: Orlando, Florida
   price: 49.99
   rating: 5

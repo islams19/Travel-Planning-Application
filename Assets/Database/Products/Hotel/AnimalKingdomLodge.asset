@@ -10,20 +10,22 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ef013c2d4dac04a448bb6a7811e4e3f0, type: 3}
-  m_Name: Miami
+  m_Name: AnimalKingdomLodge
   m_EditorClassIdentifier: Assembly-CSharp::Product
-  productName: Flight to Miami
-  description: Visit Florida
-  productType: 1
-  location: Miami, Florida
+  id: e11581b56c6e1464689436b0b3550fe7
+  productName: Animal Kingdom Lodge
+  description: Come stay at Disney's Animal Kingdom Lodge!
+  productType: 0
+  productImage: {fileID: 0}
+  location: Orlando, Florida
   price: 299.99
   rating: 5
   available: 1
   startDate:
     year: 2026
-    month: 10
-    day: 27
+    month: 8
+    day: 1
   endDate:
     year: 2027
-    month: 12
-    day: 31
+    month: 8
+    day: 1

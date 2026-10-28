@@ -1,0 +1,1 @@
+{"name": "TravelApp.Editor", "references": ["TravelApp.Runtime", "Unity.TextMeshPro", "UnityEngine.UI", "Unity.InputSystem"], "includePlatforms": ["Editor"]}

@@ -1,91 +1,33 @@
 using TMPro;
 using UnityEngine;
+using TravelApp;
 using UIButton = UnityEngine.UI.Button;
 using UIImage = UnityEngine.UI.Image;
-
 public class ProductCardUI : MonoBehaviour
 {
     [Header("Product Information")]
     [SerializeField] private UIImage productImage;
-    [SerializeField] private TMP_Text nameText;
-    [SerializeField] private TMP_Text typeText;
-    [SerializeField] private TMP_Text locationText;
-    [SerializeField] private TMP_Text priceText;
-    [SerializeField] private TMP_Text ratingText;
-    [SerializeField] private TMP_Text dateText;
-    [SerializeField] private TMP_Text descriptionText;
-
-    [Header("Buttons")]
-    [SerializeField] private UIButton bookButton;
-
-    private Product product;
-
-    private void Awake()
+    [SerializeField] private TMP_Text nameText, typeText, locationText, priceText, ratingText, dateText, descriptionText;
+    [Header("Buttons")] [SerializeField] private UIButton bookButton;
+    Product product;
+    void Awake() { if (bookButton != null) bookButton.onClick.AddListener(BookProduct); }
+    static void Set(TMP_Text target, string text) { if (target != null) target.text = text; }
+    public void SetProduct(Product value)
     {
-        if (bookButton != null)
-        {
-            bookButton.onClick.AddListener(BookProduct);
-        }
+        product = value;
+        if (value == null) return;
+        if (productImage != null) { productImage.sprite = value.productImage; productImage.enabled = value.productImage != null; }
+        Set(nameText, value.productName); Set(typeText, value.productType.ToString()); Set(locationText, value.location);
+        Set(priceText, "$" + value.price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+        Set(ratingText, value.rating.ToString("0.0") + " / 5"); Set(descriptionText, value.description);
+        Set(dateText, value.startDate.ToDateTime().ToString("yyyy-MM-dd") + " – " + value.endDate.ToDateTime().ToString("yyyy-MM-dd"));
+        if (bookButton != null) bookButton.interactable = value.available;
     }
-
-    public void SetProduct(Product newProduct)
+    void BookProduct()
     {
-        product = newProduct;
-
-        productImage.sprite = product.productImage;
-
-        nameText.text = product.productName;
-        typeText.text = product.productType.ToString();
-        locationText.text = product.location;
-
-        priceText.text =
-            "$" + product.price.ToString("0.00");
-
-        ratingText.text =
-            product.rating.ToString("0.0") + " / 5";
-
-        descriptionText.text =
-            product.description;
-
-        dateText.text =
-            product.startDate.ToDateTime().ToString("MMM d, yyyy")
-            + " - "
-            + product.endDate.ToDateTime().ToString("MMM d, yyyy");
+        if (product == null) return;
+        if (BookingManager.Instance != null) BookingManager.Instance.Select(product);
+        else TravelScreenUI.Current?.ShowProduct(product, "", "");
     }
-
-    private void BookProduct()
-    {
-        if (product == null)
-        {
-            Debug.LogError("No product assigned to this card.");
-            return;
-        }
-
-        if (LoginManager.Instance == null ||
-            !LoginManager.Instance.IsLoggedIn())
-        {
-            Debug.LogWarning("User must be logged in.");
-            return;
-        }
-
-        User currentUser =
-            LoginManager.Instance.CurrentUser;
-
-        currentUser.cart.Add(product);
-
-        Debug.Log(
-            product.productName +
-            " added to " +
-            currentUser.username +
-            "'s cart."
-        );
-    }
-
-    private void OnDestroy()
-    {
-        if (bookButton != null)
-        {
-            bookButton.onClick.RemoveListener(BookProduct);
-        }
-    }
+    void OnDestroy() { if (bookButton != null) bookButton.onClick.RemoveListener(BookProduct); }
 }

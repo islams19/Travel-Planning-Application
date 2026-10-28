@@ -13,7 +13,7 @@ public class UserDatabase : ScriptableObject
     {
         foreach (User user in users)
         {
-            if (user.username.Equals(
+            if (user != null && !string.IsNullOrWhiteSpace(user.username) && user.username.Equals(
                 username,
                 System.StringComparison.OrdinalIgnoreCase))
             {

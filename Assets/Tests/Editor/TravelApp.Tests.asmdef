@@ -1,0 +1,1 @@
+{"name": "TravelApp.Tests", "references": ["TravelApp.Runtime", "Unity.TextMeshPro", "UnityEngine.UI"], "includePlatforms": ["Editor"], "optionalUnityReferences": ["TestAssemblies"]}

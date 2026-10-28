@@ -13,7 +13,9 @@ MonoBehaviour:
   m_Name: ProductDatabase
   m_EditorClassIdentifier: Assembly-CSharp::ProductDatabase
   products:
-  - {fileID: 11400000, guid: d805de1f0aae94124b46fd3b46950f1a, type: 2}
-  - {fileID: 11400000, guid: b89a0733b60554a68875884e76e9704b, type: 2}
-  - {fileID: 11400000, guid: b027d8436b3c442158d7c65530637695, type: 2}
   - {fileID: 11400000, guid: 9ec80f1612aba484f9a46725abc04ea1, type: 2}
+  - {fileID: 11400000, guid: b027d8436b3c442158d7c65530637695, type: 2}
+  - {fileID: 11400000, guid: b89a0733b60554a68875884e76e9704b, type: 2}
+  - {fileID: 11400000, guid: d805de1f0aae94124b46fd3b46950f1a, type: 2}
+  - {fileID: 11400000, guid: e11581b56c6e1464689436b0b3550fe7, type: 2}
+  - {fileID: 11400000, guid: eff43b05c18a14046b669c2dd8446054, type: 2}

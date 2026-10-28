@@ -12,9 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef013c2d4dac04a448bb6a7811e4e3f0, type: 3}
   m_Name: Polynesian
   m_EditorClassIdentifier: Assembly-CSharp::Product
+  id: b027d8436b3c442158d7c65530637695
   productName: Polynasian Hotel
   description: Come stay at Disney's Polynesian Hotel!
   productType: 0
+  productImage: {fileID: 0}
   location: Orlando, Florida
   price: 299.99
   rating: 5

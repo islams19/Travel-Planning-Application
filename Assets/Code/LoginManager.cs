@@ -1,75 +1,24 @@
 using UnityEngine;
 using TMPro;
-
+using TravelApp;
 public class LoginManager : MonoBehaviour
 {
     public static LoginManager Instance;
-
     [Header("Login Inputs")]
     [SerializeField] private TMP_InputField usernameInput;
     [SerializeField] private TMP_InputField passwordInput;
-
     [Header("Database")]
     [SerializeField] private UserDatabase userDatabase;
-
-    public User CurrentUser { get; private set; }
-
-    private void Awake()
-    {
-        // Prevent duplicate LoginManagers
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        Instance = this;
-
-        // Keep LoginManager alive when changing scenes
-        DontDestroyOnLoad(gameObject);
-    }
-
+    public User CurrentUser => TravelAppRuntime.Instance?.Services?.Accounts.CurrentUser;
+    void Awake() { Instance = this; if (passwordInput != null) passwordInput.contentType = TMP_InputField.ContentType.Password; }
     public bool AttemptLogin()
     {
-        string username = usernameInput.text.Trim();
-        string password = passwordInput.text;
-
-        User user = userDatabase.GetUser(username);
-
-        if (user == null)
-        {
-            Debug.Log("User not found.");
-            return false;
-        }
-
-        if (user.password != password)
-        {
-            Debug.Log("Incorrect password.");
-            return false;
-        }
-
-        CurrentUser = user;
-
-        Debug.Log("Login successful!");
-        Debug.Log("Logged in as: " + CurrentUser.username);
-
-        return true;
+        var runtime = TravelAppRuntime.Instance;
+        if (runtime?.Services == null) return false;
+        var result = runtime.Services.Accounts.Login(usernameInput != null ? usernameInput.text : "", passwordInput != null ? passwordInput.text : "");
+        runtime.Show(result); return result.success;
     }
-
-    public void Logout()
-    {
-        if (CurrentUser != null)
-        {
-            Debug.Log("Logging out: " + CurrentUser.username);
-        }
-
-        CurrentUser = null;
-
-        Debug.Log("User logged out.");
-    }
-
-    public bool IsLoggedIn()
-    {
-        return CurrentUser != null;
-    }
+    public void Logout() { TravelAppRuntime.Instance.Services.Accounts.Logout(); TravelAppRuntime.Instance.Navigate("LoginScreen"); }
+    public bool IsLoggedIn() => TravelAppRuntime.Instance?.Services?.Accounts.IsLoggedIn == true;
+    void OnDestroy() { if (Instance == this) Instance = null; }
 }
