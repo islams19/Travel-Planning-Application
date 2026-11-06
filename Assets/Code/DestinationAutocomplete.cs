@@ -79,6 +79,10 @@ public sealed class DestinationAutocomplete : MonoBehaviour
     private TMP_InputField input;
     private RectTransform results;
     private Outline selectedCardOutline;
+
+    public string SelectedDestination { get; private set; }
+    public bool CanContinue => SelectedDestination != null;
+    public event Action<bool> ContinuationChanged;
     private readonly TextMeshProUGUI[] labels = new TextMeshProUGUI[MaxSuggestions];
 
     private void Awake()
@@ -134,7 +138,7 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         }
 
         results.gameObject.SetActive(false);
-        input.onValueChanged.AddListener(UpdateSuggestions);
+        input.onValueChanged.AddListener(OnSearchTextChanged);
         input.onSelect.AddListener(UpdateSuggestions);
         field.gameObject.SetActive(true);
         BindDestinationCards();
@@ -170,23 +174,43 @@ public sealed class DestinationAutocomplete : MonoBehaviour
             outline.effectColor = input.caretColor;
             outline.effectDistance = new Vector2(2, 2);
             outline.enabled = false;
-            button.onClick.AddListener(() =>
-            {
-                if (selectedCardOutline != null)
-                    selectedCardOutline.enabled = false;
-                selectedCardOutline = outline;
-                outline.enabled = true;
-                SelectDestination(destination);
-            });
+            button.onClick.AddListener(() => SelectDestination(destination, outline));
         }
     }
 
-    private void SelectDestination(string destination)
+    private void SelectDestination(string destination, Outline cardOutline = null)
     {
         input.DeactivateInputField();
         input.SetTextWithoutNotify(destination);
+        if (cardOutline != null || !string.Equals(SelectedDestination, destination, StringComparison.Ordinal))
+            SetCardOutline(cardOutline);
+
+        SelectedDestination = destination;
         input.textComponent.rectTransform.anchoredPosition = Vector2.zero;
         results.gameObject.SetActive(false);
+        ContinuationChanged?.Invoke(CanContinue);
+    }
+
+    private void OnSearchTextChanged(string value)
+    {
+        if (SelectedDestination != null && !string.Equals(value, SelectedDestination, StringComparison.Ordinal))
+        {
+            SelectedDestination = null;
+            SetCardOutline(null);
+            ContinuationChanged?.Invoke(CanContinue);
+        }
+
+        UpdateSuggestions(value);
+    }
+
+    private void SetCardOutline(Outline outline)
+    {
+        if (selectedCardOutline != null)
+            selectedCardOutline.enabled = false;
+
+        selectedCardOutline = outline;
+        if (selectedCardOutline != null)
+            selectedCardOutline.enabled = true;
     }
 
     private void OnDisable()
