@@ -18,6 +18,9 @@ public sealed class DateSelectionPage : MonoBehaviour
     private TMP_Text destinationLabel;
     private TMP_Text monthLabel;
     private TMP_Text selectedDatesLabel;
+    private UnityEngine.UI.Button confirmButton;
+    public event Action<DateTime, DateTime?> DatesConfirmed;
+    private bool oneWay;
     private DateTime displayedMonth;
     private DateTime? departureDate;
     private DateTime? returnDate;
@@ -70,7 +73,24 @@ public sealed class DateSelectionPage : MonoBehaviour
         selectedDatesLabel.enableAutoSizing = true;
         selectedDatesLabel.fontSizeMin = 18;
         selectedDatesLabel.fontSizeMax = 30;
-        Control("Confirm Dates", summary, 48, 339, 416, 84, "Confirm Dates", Blue, Color.white, 24, 0.8f);
+        confirmButton = Control("Confirm Dates", summary, 48, 339, 416, 84, "Confirm Dates", Blue, Color.white, 24, 0.8f);
+        confirmButton.transition = Selectable.Transition.ColorTint;
+        var confirmColors = confirmButton.colors;
+        confirmColors.disabledColor = new Color32(170, 180, 209, 255);
+        confirmButton.colors = confirmColors;
+        confirmButton.onClick.AddListener(ConfirmDates);
+        var tripType = Control("Trip type", summary, 48, 291, 190, 40,
+            "Round trip", PaleBlue, Blue, 18, 2);
+        var tripTypeLabel = tripType.GetComponentInChildren<TMP_Text>();
+        tripType.onClick.AddListener(() =>
+        {
+            oneWay = !oneWay;
+            if (oneWay)
+                returnDate = null;
+            tripTypeLabel.text = oneWay ? "One way" : "Round trip";
+            RefreshCalendar();
+            RefreshSelectedDates();
+        });
 
         DateTime today = DateTime.Today;
         displayedMonth = new DateTime(today.Year, today.Month, 1);
@@ -88,7 +108,7 @@ public sealed class DateSelectionPage : MonoBehaviour
 
     private void SelectDate(DateTime date)
     {
-        if (!departureDate.HasValue || returnDate.HasValue || date <= departureDate.Value)
+        if (oneWay || !departureDate.HasValue || returnDate.HasValue || date <= departureDate.Value)
         {
             departureDate = date;
             returnDate = null;
@@ -131,6 +151,7 @@ public sealed class DateSelectionPage : MonoBehaviour
 
     private void RefreshSelectedDates()
     {
+        confirmButton.interactable = departureDate.HasValue && (oneWay || returnDate.HasValue);
         if (!departureDate.HasValue)
         {
             selectedDatesLabel.text = "Select a departure date";
@@ -141,7 +162,13 @@ public sealed class DateSelectionPage : MonoBehaviour
         string departure = departureDate.Value.ToString(format, CultureInfo.InvariantCulture);
         selectedDatesLabel.text = returnDate.HasValue
             ? departure + " – " + returnDate.Value.ToString(format, CultureInfo.InvariantCulture)
-            : departure + " – Select return";
+            : oneWay ? departure + " · One way" : departure + " – Select return";
+    }
+
+    private void ConfirmDates()
+    {
+        if (departureDate.HasValue && (oneWay || returnDate.HasValue && returnDate.Value > departureDate.Value))
+            DatesConfirmed?.Invoke(departureDate.Value, returnDate);
     }
 
     public void SetDestination(string destination)
@@ -163,13 +190,13 @@ public sealed class DateSelectionPage : MonoBehaviour
         return button;
     }
 
-    private RectTransform Panel(string objectName, Transform parent, float x, float y, float width, float height)
+    internal RectTransform Panel(string objectName, Transform parent, float x, float y, float width, float height)
     {
         var edge = Shape(objectName, parent, x, y, width, height, Border);
         return Shape("Surface", edge, 1.5f, 1.5f, width - 3, height - 3, Color.white);
     }
 
-    private RectTransform Shape(string objectName, Transform parent, float x, float y, float width, float height,
+    internal RectTransform Shape(string objectName, Transform parent, float x, float y, float width, float height,
         Color color, float cornerScale = 1)
     {
         var rect = Place(objectName, parent, x, y, width, height);
@@ -182,7 +209,7 @@ public sealed class DateSelectionPage : MonoBehaviour
         return rect;
     }
 
-    private UnityEngine.UI.Button Control(string objectName, Transform parent, float x, float y, float width, float height,
+    internal UnityEngine.UI.Button Control(string objectName, Transform parent, float x, float y, float width, float height,
         string caption, Color fill, Color color, float fontSize, float cornerScale = 1)
     {
         var rect = Shape(objectName, parent, x, y, width, height, fill, cornerScale);
@@ -195,7 +222,7 @@ public sealed class DateSelectionPage : MonoBehaviour
         return button;
     }
 
-    private static TMP_Text Text(string objectName, Transform parent, float x, float y, float width, float height,
+    internal static TMP_Text Text(string objectName, Transform parent, float x, float y, float width, float height,
         string value, float size, Color color, bool bold, TextAlignmentOptions alignment = TextAlignmentOptions.Center)
     {
         var label = Place(objectName, parent, x, y, width, height).gameObject.AddComponent<TextMeshProUGUI>();

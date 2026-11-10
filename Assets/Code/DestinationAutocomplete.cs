@@ -79,6 +79,13 @@ public sealed class DestinationAutocomplete : MonoBehaviour
     private TMP_InputField input;
     private RectTransform results;
     private Outline selectedCardOutline;
+    private string initialAirport;
+
+    internal void ConfigureOrigin(string[] airports)
+    {
+        destinations = airports;
+        initialAirport = airports[0];
+    }
 
     public string SelectedDestination { get; private set; }
     public bool CanContinue => SelectedDestination != null;
@@ -94,15 +101,15 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         hitArea.color = Color.clear;
 
         var viewport = CreateRect("Text viewport", field, Vector2.zero, Vector2.one);
-        // Keep scrolled input text out of the search icon area.
-        viewport.offsetMin = new Vector2(85, 17);
+        // Keep scrolled input text inside the field padding.
+        viewport.offsetMin = new Vector2(24, 17);
         viewport.offsetMax = new Vector2(-24, -7);
         viewport.gameObject.AddComponent<RectMask2D>();
         var value = CreateLabel("Text", viewport);
         var placeholder = CreateLabel("Placeholder", viewport);
         // Center the line using font metrics so different glyphs share a baseline.
         value.alignment = placeholder.alignment = TextAlignmentOptions.Left;
-        placeholder.text = "Search destinations";
+        placeholder.text = initialAirport == null ? "Search destinations" : "Search origin airports";
         placeholder.color = new Color32(100, 106, 118, 255);
 
         input = field.gameObject.AddComponent<TMP_InputField>();
@@ -141,7 +148,10 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         input.onValueChanged.AddListener(OnSearchTextChanged);
         input.onSelect.AddListener(UpdateSuggestions);
         field.gameObject.SetActive(true);
-        BindDestinationCards();
+        if (initialAirport == null)
+            BindDestinationCards();
+        else
+            SelectDestination(initialAirport);
     }
 
     private void BindDestinationCards()
@@ -250,6 +260,10 @@ public sealed class DestinationAutocomplete : MonoBehaviour
     private static bool MatchesDestination(string destination, string prefix)
     {
         if (destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        int airportCode = destination.LastIndexOf('(');
+        if (airportCode >= 0 && destination.AsSpan(airportCode + 1).StartsWith(prefix.AsSpan(), StringComparison.OrdinalIgnoreCase))
             return true;
 
         int separator = destination.LastIndexOf(',');
