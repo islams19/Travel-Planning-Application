@@ -1,42 +1,31 @@
 using UnityEngine;
-
+using TravelApp;
 public class ButtonManager : MonoBehaviour
 {
     public static ButtonManager Instance { get; private set; }
-
-    private void Awake()
-    {
-        if (Instance != null && Instance != this)
-        {
-            Debug.LogError("More than one ButtonManager exists in the scene.");
-            return;
-        }
-
-        Instance = this;
-    }
-
+    void Awake() { Instance = this; }
+    void OnDestroy() { if (Instance == this) Instance = null; }
+    // Compatibility adapter for existing named buttons. New UI uses direct callbacks.
     public void ButtonPressed(string buttonName)
     {
-        Debug.Log("Button Manager received: " + buttonName);
-
+        var runtime = TravelAppRuntime.Instance;
+        if (runtime?.Services == null) return;
         switch (buttonName)
         {
-            case "LoginButton":
-                Debug.Log("LOGGING IN");
-                break;
-            
+            case "LoginButton": if (LoginManager.Instance != null && LoginManager.Instance.AttemptLogin()) runtime.Navigate("HomeScreen"); break;
+            case "HomeButton": case "BackButton": runtime.Navigate("HomeScreen"); break;
+            case "BookingButton": runtime.Navigate("BookingScreen"); break;
+            case "AccountButton": runtime.Navigate("AccountScreen"); break;
+            case "LogoutButton": runtime.Services.Accounts.Logout(); runtime.Navigate("LoginScreen"); break;
+            case "SearchButton": BookingManager.Instance?.Search(); break;
+            case "ResetFiltersButton": BookingManager.Instance?.ResetFilters(); break;
             case "QuitButton":
-                Debug.Log("QUITTING APPLICATION");
-                break;
-
-            default:
-                Debug.LogWarning("No action assigned for: " + buttonName);
+#if UNITY_EDITOR
+                UnityEditor.EditorApplication.isPlaying = false;
+#else
+                Application.Quit();
+#endif
                 break;
         }
-    }
-
-    private void Login()
-    {
-        Debug.Log("LOGIN ACTION");
     }
 }

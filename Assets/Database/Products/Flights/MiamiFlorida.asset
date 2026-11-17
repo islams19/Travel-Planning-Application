@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef013c2d4dac04a448bb6a7811e4e3f0, type: 3}
+  m_Name: MiamiFlorida
+  m_EditorClassIdentifier: Assembly-CSharp::Product
+  id: b89a0733b60554a68875884e76e9704b
+  productName: Flight to Miami
+  description: Visit Florida
+  productType: 1
+  productImage: {fileID: 0}
+  location: Miami, Florida
+  price: 299.99
+  rating: 5
+  available: 1
+  startDate:
+    year: 2026
+    month: 10
+    day: 27
+  endDate:
+    year: 2027
+    month: 12
+    day: 31
