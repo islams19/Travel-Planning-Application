@@ -1,0 +1,44 @@
+Flight Map runtime validation — 2026-11-17T23:27:06.2706254-05:00
+PASS — Game view accepted fixed 1280x720 sharp-preview configuration
+PASS — Canvas is active and overlay
+PASS — Canvas uses readable 1280x720 scaling
+PASS — Canvas uses pixel-perfect overlay alignment
+PASS — EventSystem exists
+PASS — Input System UI actions are assigned
+PASS — Manager, selector, route, viewport, animator exist
+PASS — Demo price manager and provider are active
+PASS — Map texture is assigned at 4096x2048
+PASS — Search text is readable and correctly inset
+PASS — Airplane icon is at least 64 pixels
+PASS — Flight controls have visible positive-height rectangles
+PASS — Route contains samples
+PASS — Markers and airplane are active
+PASS — Start/Pause/Restart buttons are active
+PASS — All five buttons have serialized onClick callbacks
+PASS — All five buttons are interactable raycast targets
+PASS — Multiple demo price bubbles are displayed
+PASS — Price bubbles share the map transform
+PASS — Demo prices are clearly labeled not live
+PASS — Destination search filters to MIA
+PASS — Changing destination updates distance
+PASS — Pointer drag pans shared map content
+PASS — Changing destination restores LAX route
+PASS — Changing departure refreshes demo offers
+PASS — Missing demo fare is handled visibly
+PASS — Price bubble is an interactable raycast target
+PASS — Clicking a price bubble selects its destination
+PASS — Price selection updates route and information
+PASS — Configured demonstration duration is 12 seconds
+PASS — Zoom In button enlarges map
+PASS — Zoom Out button reduces map
+PASS — Price bubbles keep a constant readable screen size
+PASS — Game view capture is native 1280x720
+PASS — Start Flight moves the airplane
+PASS — Pause stops movement
+PASS — Resume returns to Flying
+PASS — Restart returns to departure
+PASS — Zoom In remains functional after Restart
+PASS — Repeated Start clicks keep one flight active
+PASS — Flight reaches Arrived
+PASS — Arrival message is visible
+PASS — Game view capture is native 1920x1080

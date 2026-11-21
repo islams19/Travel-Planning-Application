@@ -1,0 +1,6 @@
+{
+  "name": "FlightMap.Editor",
+  "rootNamespace": "TravelApp.FlightMap.Editor",
+  "references": ["FlightMap.Runtime", "Unity.TextMeshPro", "UnityEngine.UI", "Unity.InputSystem"],
+  "includePlatforms": ["Editor"]
+}

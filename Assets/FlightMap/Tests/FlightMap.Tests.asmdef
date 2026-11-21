@@ -1,0 +1,7 @@
+{
+  "name": "FlightMap.Tests",
+  "rootNamespace": "TravelApp.FlightMap.Tests",
+  "references": ["FlightMap.Runtime"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}
