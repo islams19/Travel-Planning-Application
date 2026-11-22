@@ -148,7 +148,7 @@ public static class EditableTravelUIBuilder
         Button(form, "Sign in", "Sign in", screen.auth.Login);
         Text(form, "New around here?", 15, Muted, 26);
         Button(form, "Create account", "Create an account", screen.RegisterPage, false);
-        Text(form, "Offline classroom demo. No real payments or reservations.", 13, Muted, 52);
+        Text(form, "Plan your next journey.", 13, Muted, 52);
     }
     static void BuildRegister(RectTransform page, TravelScreenUI screen)
     {

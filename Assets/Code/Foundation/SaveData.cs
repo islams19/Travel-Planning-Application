@@ -6,6 +6,7 @@ namespace TravelApp
     {
         public int version = 1;
         public List<AccountData> accounts = new List<AccountData>();
+        public List<TripDraft> draftTrips = new List<TripDraft>();
         public List<ReviewData> reviews = new List<ReviewData>();
     }
     [Serializable] public sealed class AccountData

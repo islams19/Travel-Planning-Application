@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="3" result="Passed" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.1543935">
+  <test-suite type="TestSuite" id="1000" name="Travel-Planning-Application" fullname="Travel-Planning-Application" runstate="Runnable" testcasecount="20" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.154394" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1005" name="FlightMap.Tests.dll" fullname="C:/Users/shadm/OneDrive/Documents/GitHub/Travel-Planning-Application/Library/ScriptAssemblies/FlightMap.Tests.dll" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.139188" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="22764" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1006" name="TravelApp" fullname="TravelApp" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.138419" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1007" name="FlightMap" fullname="TravelApp.FlightMap" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.138096" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1008" name="Tests" fullname="TravelApp.FlightMap.Tests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.137181" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1001" name="FlightGeoMathTests" fullname="TravelApp.FlightMap.Tests.FlightGeoMathTests" classname="TravelApp.FlightMap.Tests.FlightGeoMathTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.134104" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1004" name="GreatCircleRoute_StartsAndEndsAtSelectedCoordinates" fullname="TravelApp.FlightMap.Tests.FlightGeoMathTests.GreatCircleRoute_StartsAndEndsAtSelectedCoordinates" methodname="GreatCircleRoute_StartsAndEndsAtSelectedCoordinates" classname="TravelApp.FlightMap.Tests.FlightGeoMathTests" runstate="Runnable" seed="1096753156" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.061324" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1002" name="JfkToLaxDistance_IsWithinKnownTolerance" fullname="TravelApp.FlightMap.Tests.FlightGeoMathTests.JfkToLaxDistance_IsWithinKnownTolerance" methodname="JfkToLaxDistance_IsWithinKnownTolerance" classname="TravelApp.FlightMap.Tests.FlightGeoMathTests" runstate="Runnable" seed="637472451" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.002030" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1003" name="Projection_MapsWorldBoundsToUnitSquare" fullname="TravelApp.FlightMap.Tests.FlightGeoMathTests.Projection_MapsWorldBoundsToUnitSquare" methodname="Projection_MapsWorldBoundsToUnitSquare" classname="TravelApp.FlightMap.Tests.FlightGeoMathTests" runstate="Runnable" seed="1907849876" result="Passed" start-time="2026-11-17 19:11:54Z" end-time="2026-11-17 19:11:54Z" duration="0.014906" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[Saving results to: C:/Users/shadm/AppData/LocalLow/DefaultCompany/Travel-Planning-Application\TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

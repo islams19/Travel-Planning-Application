@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,15 +18,28 @@ public sealed class DateSelectionPage : MonoBehaviour
     private Texture2D roundedTexture;
     private TMP_Text destinationLabel;
     private TMP_Text monthLabel;
+    private TMP_Text secondMonthLabel;
+    private TMP_Text selectionHint;
+    private TMP_Text fareNote;
+    private GameObject cheaperLegend;
+    private Func<DateTime,int?> estimateDateFare;
     private TMP_Text selectedDatesLabel;
     private UnityEngine.UI.Button confirmButton;
     public event Action<DateTime, DateTime?> DatesConfirmed;
     private bool oneWay;
+    private bool editingReturn;
+    private bool editingDeparture;
+    public event Action DatesChanged;
     private DateTime displayedMonth;
     private DateTime? departureDate;
     private DateTime? returnDate;
-    private readonly UnityEngine.UI.Button[] dayButtons = new UnityEngine.UI.Button[42];
-    private readonly TMP_Text[] dayLabels = new TMP_Text[42];
+    private readonly UnityEngine.UI.Button[] dayButtons = new UnityEngine.UI.Button[84];
+    private readonly TMP_Text[] dayLabels = new TMP_Text[84];
+
+    private readonly TMP_Text[] fareLabels = new TMP_Text[84];
+    private readonly DateTime?[] cellDates = new DateTime?[84];
+    private readonly int?[] estimatedFares = new int?[84];
+    private static readonly Color LowerFare = new Color32(22,128,87,255);
 
     public void Build()
     {
@@ -34,63 +48,48 @@ public sealed class DateSelectionPage : MonoBehaviour
         background.color = Background;
         background.raycastTarget = false;
 
-        var calendar = Panel("Calendar", transform, 60, 62, 856, 602);
-        monthLabel = Text("Month", calendar, 112, 47, 632, 60, "", 28, Ink, true);
-        Control("Previous month", calendar, 48, 48, 60, 60, "<", Background, Muted, 30)
-            .onClick.AddListener(() => ChangeMonth(-1));
-        Control("Next month", calendar, 748, 48, 60, 60, ">", Background, Muted, 30)
-            .onClick.AddListener(() => ChangeMonth(1));
-
-        string[] weekdays = { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" };
-        for (int i = 0; i < weekdays.Length; i++)
-            Text(weekdays[i], calendar, 48 + i * 110, 132, 98, 49, weekdays[i], 18, Muted, true);
-
-        for (int i = 0; i < dayButtons.Length; i++)
+        var calendar = Panel("Calendar", transform, 60, 62, 1416, 640);
+        selectionHint=Text("Calendar instruction",calendar,28,18,520,38,"Choose departure date",26,Ink,true,TextAlignmentOptions.Left);
+        destinationLabel=Text("Destination",calendar,580,20,804,34,"",20,Muted,false,TextAlignmentOptions.Right);
+        destinationLabel.overflowMode=TextOverflowModes.Ellipsis;
+        monthLabel=Text("Month",calendar,84,72,540,46,"",25,Ink,true);
+        secondMonthLabel=Text("Following month",calendar,792,72,540,46,"",25,Ink,true);
+        Control("Previous month",calendar,28,72,46,46,"<",Background,Muted,26).onClick.AddListener(()=>ChangeMonth(-1));
+        Control("Next month",calendar,1340,72,46,46,">",Background,Muted,26).onClick.AddListener(()=>ChangeMonth(1));
+        var divider=Shape("Month divider",calendar,706,76,1,508,Border);
+        divider.GetComponent<Image>().sprite=null;
+        string[] weekdays={"Mo","Tu","We","Th","Fr","Sa","Su"};
+        for(int month=0;month<2;month++)
         {
-            int cell = i;
-            var button = Control("Day cell " + (i + 1), calendar, 48 + i % 7 * 110, 205,
-                98, 60, "", Color.white, Ink, 22, 3);
-            dayButtons[i] = button;
-            dayLabels[i] = button.GetComponentInChildren<TMP_Text>();
-            button.onClick.AddListener(() => SelectDate(displayedMonth.AddDays(cell - FirstDayOffset)));
+            float left=month==0 ? 36 : 744;
+            for(int column=0;column<7;column++)
+                Text("Weekday "+month+" "+column,calendar,left+column*92,132,84,34,weekdays[column],17,Muted,true);
+            for(int cell=0;cell<42;cell++)
+            {
+                int index=month*42+cell;
+                var button=Control("Day cell "+(index+1),calendar,left+cell%7*92,180+cell/7*70,84,64,"",Color.white,Ink,21,3);
+                dayButtons[index]=button;
+                dayLabels[index]=button.GetComponentInChildren<TMP_Text>();
+                dayLabels[index].rectTransform.anchoredPosition=new Vector2(0,-4);
+                dayLabels[index].rectTransform.sizeDelta=new Vector2(84,27);
+                fareLabels[index]=Text("Date estimate",button.transform,0,32,84,24,"",15,Muted,false);
+                button.onClick.AddListener(()=>{ if(cellDates[index].HasValue) SelectDate(cellDates[index].Value); });
+            }
         }
+        fareNote=Text("Date fare note",calendar,28,605,1070,26,"",15,Muted,false,TextAlignmentOptions.Left);
+        cheaperLegend=Place("Lower fare legend",calendar,1120,605,264,26).gameObject;
+        Shape("Lower fare key",cheaperLegend.transform,0,10,7,7,LowerFare);
+        Text("Legend",cheaperLegend.transform,18,0,240,26,"Lower estimates",15,LowerFare,true,TextAlignmentOptions.Left);
 
-        var summary = Panel("Trip summary", transform, 964, 62, 512, 471);
-        var marker = Shape("Destination marker", summary, 48, 48, 60, 60, PaleBlue);
-        Text("Marker", marker, 0, 0, 60, 60, "•", 28, Blue, true);
-        destinationLabel = Text("Destination", summary, 132, 48, 290, 34, "", 24, Ink, true, TextAlignmentOptions.Left);
-        Text("Destination status", summary, 132, 81, 290, 30, "Destination selected", 20, Muted, false, TextAlignmentOptions.Left);
-        var indicator = Place("Selected indicator", summary, 430, 62, 30, 30)
-            .gameObject.AddComponent<RawImage>();
-        indicator.texture = Resources.Load<Texture2D>("DateSelectionCheck");
-        indicator.raycastTarget = false;
-        var divider = Shape("Divider", summary, 48, 155, 416, 2, Border);
-        divider.GetComponent<Image>().sprite = null;
-        divider.GetComponent<Image>().type = Image.Type.Simple;
-
-        Text("Selected trip", summary, 48, 195, 416, 40, "SELECTED TRIP", 18, Muted, true, TextAlignmentOptions.Left);
-        selectedDatesLabel = Text("Selected dates", summary, 48, 247, 416, 45, "", 30, Ink, true, TextAlignmentOptions.Left);
-        selectedDatesLabel.enableAutoSizing = true;
-        selectedDatesLabel.fontSizeMin = 18;
-        selectedDatesLabel.fontSizeMax = 30;
-        confirmButton = Control("Confirm Dates", summary, 48, 339, 416, 84, "Confirm Dates", Blue, Color.white, 24, 0.8f);
-        confirmButton.transition = Selectable.Transition.ColorTint;
-        var confirmColors = confirmButton.colors;
-        confirmColors.disabledColor = new Color32(170, 180, 209, 255);
-        confirmButton.colors = confirmColors;
+        var summary=Panel("Trip summary",transform,60,722,1416,144);
+        Text("Selected trip",summary,264,20,600,28,"SELECTED TRIP",17,Muted,true,TextAlignmentOptions.Left);
+        selectedDatesLabel=Text("Selected dates",summary,264,56,600,44,"",25,Ink,true,TextAlignmentOptions.Left);
+        selectedDatesLabel.enableAutoSizing=true; selectedDatesLabel.fontSizeMin=18; selectedDatesLabel.fontSizeMax=25;
+        confirmButton=Control("Confirm Dates",summary,1104,56,284,56,"Done",Blue,Color.white,23,1.4f);
         confirmButton.onClick.AddListener(ConfirmDates);
-        var tripType = Control("Trip type", summary, 48, 291, 190, 40,
-            "Round trip", PaleBlue, Blue, 18, 2);
-        var tripTypeLabel = tripType.GetComponentInChildren<TMP_Text>();
-        tripType.onClick.AddListener(() =>
-        {
-            oneWay = !oneWay;
-            if (oneWay)
-                returnDate = null;
-            tripTypeLabel.text = oneWay ? "One way" : "Round trip";
-            RefreshCalendar();
-            RefreshSelectedDates();
-        });
+        var tripType=Control("Trip type",summary,24,20,210,40,"Round trip",PaleBlue,Blue,18,2);
+        DropdownChevron.Attach(tripType);
+        tripType.onClick.AddListener(()=>SetOneWay(!oneWay));
 
         DateTime today = DateTime.Today;
         displayedMonth = new DateTime(today.Year, today.Month, 1);
@@ -98,60 +97,81 @@ public sealed class DateSelectionPage : MonoBehaviour
         RefreshSelectedDates();
     }
 
-    private int FirstDayOffset => ((int)displayedMonth.DayOfWeek + 6) % 7;
+    private static int FirstDayOffset(DateTime month) => ((int)month.DayOfWeek+6)%7;
+    private bool ChoosingReturn => !oneWay && !editingDeparture && departureDate.HasValue && (editingReturn || !returnDate.HasValue);
 
     private void ChangeMonth(int amount)
     {
-        displayedMonth = displayedMonth.AddMonths(amount);
+        int serial=(displayedMonth.Year-1)*12+displayedMonth.Month-1;
+        serial=Mathf.Clamp(serial+amount,0,9999*12-2);
+        displayedMonth=new DateTime(serial/12+1,serial%12+1,1);
         RefreshCalendar();
     }
 
     private void SelectDate(DateTime date)
     {
-        if (oneWay || !departureDate.HasValue || returnDate.HasValue || date <= departureDate.Value)
+        date=date.Date;
+        if(ChoosingReturn)
         {
-            departureDate = date;
-            returnDate = null;
+            if(date<=departureDate.Value) return;
+            returnDate=date;
         }
         else
         {
-            returnDate = date;
+            departureDate=date; returnDate=null; editingReturn=false; editingDeparture=false;
         }
-
-        RefreshCalendar();
-        RefreshSelectedDates();
+        RefreshCalendar(); RefreshSelectedDates();
     }
+
+    internal void ConfigureDateEstimates(Func<DateTime,int?> provider)
+    { estimateDateFare=provider; RefreshCalendar(); }
+    internal void RefreshDateEstimates() => RefreshCalendar();
 
     private void RefreshCalendar()
     {
-        monthLabel.text = displayedMonth.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
-        int offset = FirstDayOffset;
-        int days = DateTime.DaysInMonth(displayedMonth.Year, displayedMonth.Month);
-        int rowSpacing = offset + days > 35 ? 66 : 72;
-        for (int i = 0; i < dayButtons.Length; i++)
+        monthLabel.text=displayedMonth.ToString("MMMM yyyy",CultureInfo.InvariantCulture);
+        secondMonthLabel.text=displayedMonth.AddMonths(1).ToString("MMMM yyyy",CultureInfo.InvariantCulture);
+        selectionHint.text=ChoosingReturn ? "Choose return date" : "Choose departure date";
+        for(int i=0;i<84;i++)
         {
-            var button = dayButtons[i];
-            int day = i - offset + 1;
-            bool visible = day >= 1 && day <= days;
-            button.gameObject.SetActive(visible);
-            if (!visible)
-                continue;
-
-            DateTime date = displayedMonth.AddDays(day - 1);
-            bool endpoint = date == departureDate || date == returnDate;
-            bool inRange = departureDate.HasValue && returnDate.HasValue &&
-                date > departureDate.Value && date < returnDate.Value;
-            var rect = (RectTransform)button.transform;
-            rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, -205 - i / 7 * rowSpacing);
-            button.targetGraphic.color = endpoint ? Blue : inRange ? PaleBlue : Color.white;
-            dayLabels[i].text = day.ToString(CultureInfo.InvariantCulture);
-            dayLabels[i].color = endpoint ? Color.white : inRange ? Blue : Ink;
+            DateTime month=displayedMonth.AddMonths(i/42);
+            int day=i%42-FirstDayOffset(month)+1;
+            bool visible=day>=1 && day<=DateTime.DaysInMonth(month.Year,month.Month);
+            cellDates[i]=visible ? month.AddDays(day-1) : (DateTime?)null;
+            estimatedFares[i]=visible ? estimateDateFare?.Invoke(cellDates[i].Value) : null;
+            dayButtons[i].gameObject.SetActive(visible);
+        }
+        var prices=estimatedFares.Where((price,index)=>price.HasValue && cellDates[index].HasValue &&
+            (!ChoosingReturn || cellDates[index]>departureDate)).Select(price=>price.Value).OrderBy(price=>price).ToArray();
+        int threshold=prices.Length>0 ? prices[(prices.Length-1)/4] : 0;
+        bool hasPrices=estimatedFares.Any(price=>price.HasValue);
+        fareNote.text=hasPrices ? "Estimated one-way fares per traveler · USD. Not live or guaranteed; flight-result prices may differ." :
+            "Choose From and To to see estimated date fares.";
+        cheaperLegend.SetActive(hasPrices);
+        for(int i=0;i<84;i++)
+        {
+            if(!cellDates[i].HasValue) continue;
+            DateTime date=cellDates[i].Value;
+            bool endpoint=date==departureDate || date==returnDate;
+            bool inRange=departureDate.HasValue && returnDate.HasValue && date>departureDate && date<returnDate;
+            bool selectable=!ChoosingReturn || date>departureDate;
+            dayButtons[i].interactable=selectable;
+            dayButtons[i].targetGraphic.color=endpoint ? Blue : inRange ? PaleBlue : Color.white;
+            dayLabels[i].text=date.Day.ToString(CultureInfo.InvariantCulture);
+            dayLabels[i].color=endpoint ? Color.white : inRange ? Blue : selectable ? Ink : new Color32(186,193,206,255);
+            fareLabels[i].text=estimatedFares[i].HasValue && (selectable || endpoint) ? $"${estimatedFares[i].Value:N0}" : "";
+            bool cheaper=estimatedFares[i].HasValue && estimatedFares[i]<=threshold;
+            fareLabels[i].color=endpoint ? Color.white : inRange ? Blue : cheaper ? LowerFare : Muted;
+            fareLabels[i].fontStyle=cheaper ? FontStyles.Bold : FontStyles.Normal;
         }
     }
 
     private void RefreshSelectedDates()
     {
-        confirmButton.interactable = departureDate.HasValue && (oneWay || returnDate.HasValue);
+        DatesChanged?.Invoke();
+        confirmButton.interactable = departureDate.HasValue && (oneWay || returnDate.HasValue && returnDate>departureDate);
+        confirmButton.targetGraphic.color=confirmButton.interactable ? Blue : Border;
+        confirmButton.GetComponentInChildren<TMP_Text>().color=confirmButton.interactable ? Color.white : Muted;
         if (!departureDate.HasValue)
         {
             selectedDatesLabel.text = "Select a departure date";
@@ -169,6 +189,35 @@ public sealed class DateSelectionPage : MonoBehaviour
     {
         if (departureDate.HasValue && (oneWay || returnDate.HasValue && returnDate.Value > departureDate.Value))
             DatesConfirmed?.Invoke(departureDate.Value, returnDate);
+    }
+
+    internal DateTime? Departure => departureDate;
+    internal DateTime? Return => returnDate;
+    internal bool IsOneWay => oneWay;
+    internal void RestoreDates(DateTime? departure, DateTime? returning, bool isOneWay)
+    {
+        editingReturn=false; editingDeparture=false;
+        departureDate = departure;
+        oneWay = isOneWay;
+        returnDate = !isOneWay && departure.HasValue && returning>departure ? returning : null;
+        var month = departure ?? DateTime.Today;
+        displayedMonth = new DateTime(month.Year, month.Month, 1);
+        transform.Find("Trip summary/Surface/Trip type").GetComponentInChildren<TMP_Text>().text = oneWay ? "One way" : "Round trip";
+        RefreshCalendar();
+        RefreshSelectedDates();
+    }
+
+    internal void SetOneWay(bool value) => RestoreDates(departureDate,returnDate,value);
+    internal void BeginDateEdit(bool returnField)
+    {
+        editingReturn=returnField && departureDate.HasValue && !oneWay;
+        editingDeparture=!returnField;
+        var date=departureDate ?? DateTime.Today;
+        var first=new DateTime(date.Year,date.Month,1);
+        if(returnField && returnDate.HasValue && returnDate.Value>=first.AddMonths(2))
+            first=new DateTime(returnDate.Value.Year,returnDate.Value.Month,1).AddMonths(-1);
+        displayedMonth=first;
+        RefreshCalendar();
     }
 
     public void SetDestination(string destination)
@@ -218,7 +267,8 @@ public sealed class DateSelectionPage : MonoBehaviour
         var button = rect.gameObject.AddComponent<UnityEngine.UI.Button>();
         button.targetGraphic = image;
         button.transition = Selectable.Transition.None;
-        Text("Label", rect, 0, 0, width, height, caption, fontSize, color, true);
+        var captionLabel=Text("Label", rect, 0, 0, width, height, caption, fontSize, color, true);
+        captionLabel.margin=new Vector4(12,0,12,0);
         return button;
     }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,13 +32,16 @@ public sealed class SeatSelectionPage : MonoBehaviour
     private TMP_Text status;
     private UnityEngine.UI.Button confirm;
     private int activeTraveler;
+    private int activeSegment;
+    private RectTransform segmentPanel;
+    private readonly List<UnityEngine.UI.Button> segmentButtons = new List<UnityEngine.UI.Button>();
 
     public Booking CurrentBooking { get; private set; }
     public event Action SeatsConfirmed;
 
     public sealed class Booking
     {
-        private readonly string[] assignments;
+        private readonly string[][] assignments;
         public string Origin { get; }
         public string Destination { get; }
         public DateTime DepartureDate { get; }
@@ -45,9 +49,13 @@ public sealed class SeatSelectionPage : MonoBehaviour
         public string Cabin { get; }
         public FlightResultsPage.Flight Flight { get; }
         public int FarePerTraveler { get; }
-        public IReadOnlyList<string> Seats { get; }
+        public IReadOnlyList<string> Seats => SegmentSeats[0];
+        public IReadOnlyList<IReadOnlyList<string>> SegmentSeats { get; }
+        public IReadOnlyList<string> SeatsForSegment(int segment) => SegmentSeats[segment];
+        public bool HasAllSeats => assignments.All(row=>row.All(seat=>!string.IsNullOrWhiteSpace(seat)) && row.Distinct().Count()==PassengerCount);
+        public int AssignedSeatCount => assignments.Sum(row=>row.Count(seat=>!string.IsNullOrWhiteSpace(seat)));
         public bool Confirmed { get; internal set; }
-        public int PassengerCount => assignments.Length;
+        public int PassengerCount => assignments[0].Length;
 
         internal Booking(string origin, string destination, DateTime departure, DateTime? returnDate, int passengers,
             string cabin, FlightResultsPage.Flight flight, int fare)
@@ -59,15 +67,15 @@ public sealed class SeatSelectionPage : MonoBehaviour
             Cabin = cabin;
             Flight = flight;
             FarePerTraveler = fare;
-            assignments = new string[passengers];
-            Seats = Array.AsReadOnly(assignments);
+            assignments = Enumerable.Range(0,flight.Segments.Count).Select(_=>new string[passengers]).ToArray();
+            SegmentSeats = Array.AsReadOnly(assignments.Select(row=>(IReadOnlyList<string>)Array.AsReadOnly(row)).ToArray());
         }
 
-        internal int TravelerFor(string seat) => Array.IndexOf(assignments, seat);
+        internal int TravelerFor(string seat,int segment=0) => Array.IndexOf(assignments[segment], seat);
 
-        internal void Assign(int traveler, string seat)
+        internal void Assign(int traveler, string seat,int segment=0)
         {
-            assignments[traveler] = seat;
+            assignments[segment][traveler] = seat;
             Confirmed = false;
         }
     }
@@ -112,6 +120,8 @@ public sealed class SeatSelectionPage : MonoBehaviour
         Text("Booking step", content, 1040, 34, 436, 44, "01  Flight     /     02  Seats",
             20, Blue, true, TextAlignmentOptions.Right);
 
+        segmentPanel = style.Shape("Flight segments", content, 60, 88, 1416, 54, Background);
+        segmentPanel.gameObject.SetActive(false);
         var mapPanel = style.Panel("Seat map panel", content, 60, 105, 840, 1290);
         Text("Map title", mapPanel, 34, 30, 650, 42, "Find your favorite spot", 28, Ink, true, TextAlignmentOptions.Left);
         instruction = Text("Map instructions", mapPanel, 34, 78, 770, 34, "", 20, Muted, false, TextAlignmentOptions.Left);
@@ -124,7 +134,7 @@ public sealed class SeatSelectionPage : MonoBehaviour
         cabin = Text("Booked cabin", map, 24, 78, 474, 42, "", 24, Ink, true);
         Text("Aircraft rear", map, 24, 925, 474, 34, "REAR", 18, Muted, true);
         Text("Map disclaimer", mapPanel, 34, 1230, 770, 38,
-            "Illustrative cabin layout · sample availability", 18, Muted, false, TextAlignmentOptions.Left);
+            "Choose an available seat", 18, Muted, false, TextAlignmentOptions.Left);
 
         var flight = style.Panel("Flight summary", content, 940, 105, 536, 248);
         airline = SummaryText("Airline", flight, 27, 28, true);
@@ -136,7 +146,7 @@ public sealed class SeatSelectionPage : MonoBehaviour
         var summary = style.Panel("Seat summary", content, 940, 386, 536, 468);
         SummaryText("Your selected seats", summary, 26, 27, true).text = "Your selected seats";
         travelerPanel = style.Shape("Travelers", summary, 32, 79, 468, 124, Background, 2);
-        SummaryText("Seat fee", summary, 213, 19, false).text = "Sample seat fee: included";
+        SummaryText("Seat fee", summary, 213, 19, false).text = "Seat fee: included";
         total = SummaryText("Estimated total", summary, 254, 24, true);
         confirm = style.Control("Confirm Seat", summary, 32, 310, 468, 64,
             "Confirm Seat / Continue", Blue, Color.white, 22);
@@ -157,23 +167,90 @@ public sealed class SeatSelectionPage : MonoBehaviour
         {
             CurrentBooking = new Booking(origin, destinationName, departure, returnDate, results.PassengerCount,
                 results.CabinClass, results.SelectedDeparture, results.SelectedFarePerTraveler);
-            activeTraveler = 0;
+            activeTraveler = activeSegment = 0;
             RebuildMap();
+            BuildSegmentControls();
             Canvas.ForceUpdateCanvases();
             scroll.verticalNormalizedPosition = 1;
         }
 
         var booking = CurrentBooking;
-        airline.text = booking.Flight.Airline;
-        destination.text = booking.Origin + " → " + booking.Destination;
-        times.text = $"{booking.Flight.Departure} – {booking.Flight.Arrival}  ·  " +
-            $"{booking.Flight.DurationMinutes / 60}h {booking.Flight.DurationMinutes % 60}m";
-        dates.text = departure.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
-        if (returnDate.HasValue)
-            dates.text += " – " + returnDate.Value.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+        RefreshSegmentInformation();
         fare.text = $"{booking.Cabin}  ·  ${booking.FarePerTraveler:N0} per traveler";
         total.text = $"Estimated total  ·  ${booking.FarePerTraveler * booking.PassengerCount:N0} USD";
         RefreshSeats();
+    }
+
+    internal void ClearBooking() => CurrentBooking = null;
+    internal void RestoreAssignments(TripDraft.Leg saved)
+    {
+        if (CurrentBooking == null || saved == null) return;
+        for(int segment=0;segment<CurrentBooking.Flight.Segments.Count;segment++)
+        {
+            var flight=CurrentBooking.Flight.Segments[segment];
+            var savedSegment=saved.segments!=null && segment<saved.segments.Length ? saved.segments[segment] : null;
+            string[] values=savedSegment!=null && savedSegment.originCode==flight.OriginCode && savedSegment.destinationCode==flight.DestinationCode
+                ? savedSegment.seats : segment==0 && (saved.segments==null || saved.segments.Length==0) ? saved.seats : null;
+            for(int i=0;i<Mathf.Min(values?.Length ?? 0,CurrentBooking.PassengerCount);i++)
+            {
+                var seat=seats.Find(candidate=>candidate.Code==values[i] && !candidate.Unavailable);
+                if(seat!=null && CurrentBooking.TravelerFor(seat.Code,segment)<0) CurrentBooking.Assign(i,seat.Code,segment);
+            }
+        }
+        CurrentBooking.Confirmed = saved.confirmed && CurrentBooking.HasAllSeats;
+        activeSegment=0;
+        for(int segment=0;segment<CurrentBooking.SegmentSeats.Count;segment++)
+            if(CurrentBooking.SeatsForSegment(segment).Any(seat=>seat==null)) { activeSegment=segment; break; }
+        SelectSegment(activeSegment);
+    }
+
+    private void BuildSegmentControls()
+    {
+        foreach(var button in segmentButtons) { button.gameObject.SetActive(false); Destroy(button.gameObject); }
+        segmentButtons.Clear();
+        int count=CurrentBooking.Flight.Segments.Count;
+        segmentPanel.gameObject.SetActive(count>1);
+        if(count>1) for(int i=0;i<count;i++)
+        {
+            int segment=i; var flight=CurrentBooking.Flight.Segments[i];
+            float width=(1416-16*(count-1))/count;
+            var button=style.Control("Segment "+(i+1),segmentPanel,i*(width+16),0,width,46,
+                $"{i+1} · {flight.OriginCode} → {flight.DestinationCode}",PaleBlue,Blue,21,2);
+            button.onClick.AddListener(()=>SelectSegment(segment)); segmentButtons.Add(button);
+        }
+        float shift=count>1 ? 64 : 0;
+        var content=scroll.content;
+        foreach(var pair in new[]{("Seat map panel",105f),("Flight summary",105f),("Seat summary",386f),("Save for Later",880f)})
+        {
+            var rect=content.Find(pair.Item1) as RectTransform;
+            if(rect!=null) rect.anchoredPosition=new Vector2(rect.anchoredPosition.x,-pair.Item2-shift);
+        }
+        content.sizeDelta=new Vector2(content.sizeDelta.x,1470+shift);
+    }
+
+    public void SelectSegment(int segment)
+    {
+        if(CurrentBooking==null || segment<0 || segment>=CurrentBooking.SegmentSeats.Count) return;
+        activeSegment=segment; activeTraveler=0;
+        for(int i=0;i<CurrentBooking.PassengerCount;i++)
+            if(CurrentBooking.SeatsForSegment(segment)[i]==null) { activeTraveler=i; break; }
+        RefreshSeats();
+    }
+
+    private void RefreshSegmentInformation()
+    {
+        var flight=CurrentBooking.Flight.Segments[activeSegment];
+        bool connecting=CurrentBooking.Flight.Stops>0;
+        airline.text=flight.Airline+(connecting ? " · "+flight.FlightNumber : "");
+        destination.text=connecting ? flight.OriginCode+" → "+flight.DestinationCode : CurrentBooking.Origin+" → "+CurrentBooking.Destination;
+        times.text=flight.DepartureLabel+" – "+flight.ArrivalLabel+" · "+FlightResultsPage.DurationLabel(flight.DurationMinutes);
+        dates.text=flight.DepartureLocal.ToString("MMM d, yyyy",CultureInfo.InvariantCulture)+(connecting ? $" · Segment {activeSegment+1} of {CurrentBooking.SegmentSeats.Count}" : "");
+        foreach(var button in segmentButtons)
+        {
+            bool active=segmentButtons.IndexOf(button)==activeSegment;
+            button.targetGraphic.color=active ? Blue : PaleBlue;
+            button.GetComponentInChildren<TMP_Text>().color=active ? Color.white : Blue;
+        }
     }
 
     private void RebuildMap()
@@ -225,13 +302,13 @@ public sealed class SeatSelectionPage : MonoBehaviour
 
     private void AssignSeat(Seat seat)
     {
-        if (seat.Unavailable || CurrentBooking.TravelerFor(seat.Code) >= 0)
+        if (seat.Unavailable || CurrentBooking.TravelerFor(seat.Code,activeSegment) >= 0)
             return;
 
-        CurrentBooking.Assign(activeTraveler, seat.Code);
+        CurrentBooking.Assign(activeTraveler, seat.Code,activeSegment);
         for (int i = 0; i < CurrentBooking.PassengerCount; i++)
         {
-            if (CurrentBooking.Seats[i] != null)
+            if (CurrentBooking.SeatsForSegment(activeSegment)[i] != null)
                 continue;
             activeTraveler = i;
             break;
@@ -242,10 +319,11 @@ public sealed class SeatSelectionPage : MonoBehaviour
     private void RefreshSeats()
     {
         var booking = CurrentBooking;
-        instruction.text = $"Choose a seat for traveler {activeTraveler + 1} of {booking.PassengerCount}.";
+        RefreshSegmentInformation();
+        instruction.text = (booking.Flight.Stops>0 ? $"Segment {activeSegment+1} of {booking.SegmentSeats.Count} · " : "")+$"Choose a seat for traveler {activeTraveler + 1} of {booking.PassengerCount}.";
         foreach (var seat in seats)
         {
-            bool assigned = booking.TravelerFor(seat.Code) >= 0;
+            bool assigned = booking.TravelerFor(seat.Code,activeSegment) >= 0;
             seat.Button.interactable = !seat.Unavailable && !assigned;
             seat.Button.targetGraphic.color = assigned ? Blue : seat.Unavailable ? Unavailable : PaleBlue;
             seat.Label.color = assigned ? Color.white : seat.Unavailable ? Muted : Blue;
@@ -254,7 +332,7 @@ public sealed class SeatSelectionPage : MonoBehaviour
         int assignedCount = 0;
         for (int i = 0; i < travelers.Count; i++)
         {
-            string seat = booking.Seats[i];
+            string seat = booking.SeatsForSegment(activeSegment)[i];
             if (seat != null)
                 assignedCount++;
             bool active = i == activeTraveler;
@@ -265,10 +343,10 @@ public sealed class SeatSelectionPage : MonoBehaviour
             label.text = $"P{i + 1}  ·  {seat ?? "Choose"}";
         }
 
-        confirm.interactable = assignedCount == booking.PassengerCount;
+        confirm.interactable = booking.HasAllSeats;
         status.text = booking.Confirmed
             ? "Seats confirmed for this booking."
-            : $"{assignedCount} of {booking.PassengerCount} seats assigned · sample pricing";
+            : $"{booking.AssignedSeatCount} of {booking.PassengerCount*booking.SegmentSeats.Count} seats assigned";
     }
 
     private void ConfirmSeats()

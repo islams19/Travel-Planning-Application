@@ -9,6 +9,7 @@ namespace TravelApp
         readonly AppServices app;
         string currentName;
         public string Username => currentName;
+        public string Email => Current?.email ?? CurrentUser?.email;
         public bool IsLoggedIn => currentName != null;
         public User CurrentUser => app.Catalog.users.Find(u => u != null && Same(u.username, currentName));
         public bool IsAdmin => CurrentUser != null && CurrentUser.role == UserRole.Admin;
@@ -36,7 +37,7 @@ namespace TravelApp
         {
             username = (username ?? "").Trim(); email = (email ?? "").Trim();
             if (username.Length < 3 || username.Length > 40 || username.Any(char.IsControl)) return Result.Fail("Use a username between 3 and 40 characters.");
-            if (email.Length > 120 || !email.Contains("@") || email.StartsWith("@") || email.EndsWith("@")) return Result.Fail("Enter an email address.");
+            if (!EmailAddressValidator.IsValid(email)) return Result.Fail("Enter an email address such as name@example.com.");
             if (string.IsNullOrEmpty(password) || password.Length < 4 || password.Length > 128) return Result.Fail("Use a password between 4 and 128 characters.");
             if (app.Data.accounts.Exists(a => Same(a.username, username)) || app.Catalog.users.Exists(u => u != null && Same(u.username, username))) return Result.Fail("That username is already in use.");
             var account = Make(username, email, password);

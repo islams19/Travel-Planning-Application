@@ -1,1 +1,1 @@
-{"name":"TravelApp.PlayTests","references":["TravelApp.Runtime","Unity.TextMeshPro","UnityEngine.UI"],"optionalUnityReferences":["TestAssemblies"]}
+{"name":"TravelApp.PlayTests","references":["TravelApp.Runtime","Unity.TextMeshPro","UnityEngine.UI","FlightMap.Runtime","Unity.InputSystem"],"optionalUnityReferences":["TestAssemblies"]}

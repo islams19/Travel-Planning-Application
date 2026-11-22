@@ -15,7 +15,7 @@ namespace TravelApp
         {
             screen = owner;
             foreach (var input in Inputs()) input.onValueChanged.AddListener(ChangedText);
-            foreach (var drop in Dropdowns()) drop.onValueChanged.AddListener(ChangedDropdown);
+            foreach (var drop in Dropdowns()) { DropdownChevron.Attach(drop); drop.onValueChanged.AddListener(ChangedDropdown); }
         }
         TMP_InputField[] Inputs() => new[] { searchInput, minPriceInput, maxPriceInput, startDateInput, endDateInput };
         TMP_Dropdown[] Dropdowns() => new[] { typeDropdown, ratingDropdown, sortDropdown };

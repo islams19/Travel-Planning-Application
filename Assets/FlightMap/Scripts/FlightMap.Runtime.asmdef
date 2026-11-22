@@ -1,0 +1,6 @@
+{
+  "name": "FlightMap.Runtime",
+  "rootNamespace": "TravelApp.FlightMap",
+  "references": ["Unity.TextMeshPro", "UnityEngine.UI", "Unity.InputSystem"],
+  "autoReferenced": true
+}

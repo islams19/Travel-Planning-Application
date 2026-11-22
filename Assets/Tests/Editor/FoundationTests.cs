@@ -22,6 +22,38 @@ public class FoundationTests
         folder = Path.Combine(Path.GetTempPath(), "travel-test-" + Guid.NewGuid().ToString("N"));
     }
     AppServices Open() { return new AppServices(catalog, new JsonFileStore(Path.Combine(folder, "save.json"))); }
+    [TestCase("@randomtext.randommmmmmm", false)]
+    [TestCase("name@randomtext.randommmmmmm", false)]
+    [TestCase("name@example.com", true)]
+    [TestCase("first.last+trip@example.co.uk", true)]
+    [TestCase("name@sub.example.travel", true)]
+    [TestCase("name@example", false)]
+    [TestCase("name@@example.com", false)]
+    [TestCase("name@.com", false)]
+    [TestCase("name@example..com", false)]
+    [TestCase("name@-example.com", false)]
+    [TestCase("name@example-.com", false)]
+    [TestCase(".name@example.com", false)]
+    [TestCase("name..last@example.com", false)]
+    [TestCase("na me@example.com", false)]
+    [TestCase("", false)]
+    public void RegistrationValidatesEmailFormatAndDomain(string email, bool accepted)
+    {
+        var app = Open();
+        Assert.AreEqual(accepted, app.Accounts.Register("EmailTest", email, "password").success);
+        Assert.AreEqual(accepted, app.Accounts.IsLoggedIn);
+    }
+
+    [TestCase("", "password")]
+    [TestCase("ab", "password")]
+    [TestCase("ValidName", "")]
+    [TestCase("ValidName", "abc")]
+    public void RegistrationRejectsIncompleteCredentials(string username, string password)
+    {
+        var app = Open();
+        Assert.IsFalse(app.Accounts.Register(username, "person@example.com", password).success);
+        Assert.IsFalse(app.Accounts.IsLoggedIn);
+    }
     [TearDown] public void Cleanup()
     {
         UnityEngine.Object.DestroyImmediate(product); UnityEngine.Object.DestroyImmediate(user); UnityEngine.Object.DestroyImmediate(catalog);

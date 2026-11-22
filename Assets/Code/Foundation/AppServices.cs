@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Collections.Generic;
 using UnityEngine;
 namespace TravelApp
 {
@@ -15,8 +17,34 @@ namespace TravelApp
         public AppServices(TravelCatalog catalog, ISaveStore store)
         {
             Catalog = catalog; this.store = store; Data = store.Load();
+            if (Data.draftTrips == null) Data.draftTrips = new List<TripDraft>();
             Accounts = new AccountService(this); Bookings = new BookingService(this);
         }
+        private bool OwnsDraft(TripDraft draft) => string.Equals(draft.username ?? "", Accounts.Username ?? "", StringComparison.Ordinal);
+        public IReadOnlyList<TripDraft> DraftTrips => Data.draftTrips
+            .Where(draft => draft != null && OwnsDraft(draft))
+            .OrderByDescending(draft => draft.updatedUtc)
+            .Select(draft => JsonUtility.FromJson<TripDraft>(JsonUtility.ToJson(draft))).ToList().AsReadOnly();
+
+        public Result SaveDraft(TripDraft draft)
+        {
+            if (draft == null) return Result.Fail("No trip to save.");
+            if (string.IsNullOrEmpty(draft.id)) draft.id = Guid.NewGuid().ToString("N");
+            if (Data.draftTrips.Any(d => d.id == draft.id && !OwnsDraft(d)))
+                return Result.Fail("This draft belongs to another account.");
+            var snapshot = JsonUtility.FromJson<TripDraft>(JsonUtility.ToJson(draft));
+            snapshot.username = Accounts.Username;
+            snapshot.updatedUtc = DateTime.UtcNow.ToString("O");
+            return Commit(() =>
+            {
+                Data.draftTrips.RemoveAll(d => d.id == snapshot.id && OwnsDraft(d));
+                Data.draftTrips.Add(snapshot);
+            }, "Trip saved for later.");
+        }
+
+        public Result RemoveDraft(string id) => Commit(() =>
+            Data.draftTrips.RemoveAll(d => d.id == id && OwnsDraft(d)), "Draft removed.");
+
         internal Result Commit(Action mutation, string message)
         {
             string before = JsonUtility.ToJson(Data);

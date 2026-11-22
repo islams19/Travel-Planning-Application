@@ -1,0 +1,8 @@
+Local airline identity artwork (identification only; airlines retain their trademarks).
+AA: https://www.aa.com/favicon.ico
+UA: https://www.united.com/favicon.ico
+DL: https://news.delta.com/sites/default/files/styles/article_width_full_no_jpg/public/2021-11/delta_c_r.png
+    Brand guide: https://news.delta.com/delta-air-lines-logos-and-brand-guidelines
+B6: https://cms.jetblue.com/dam/ui-assets/imagery/logos/updated/JetBlue-logo.svg
+Downloaded 2026-11-22. ICO/SVG assets rasterized to PNG locally; aspect ratio preserved.
+No runtime network loading. Baggage data is synthetic, not airline policy.

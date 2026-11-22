@@ -1,5 +1,7 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,74 +9,27 @@ using UnityEngine.UI;
 [RequireComponent(typeof(Image))]
 public sealed class DestinationAutocomplete : MonoBehaviour
 {
-    private const int MaxSuggestions = 5;
+    private const int MaxSuggestions = 8;
     private const float RowHeight = 48f;
 
-    [SerializeField] private string[] destinations =
+    private string[] destinations;
+
+    public string SelectedAirportCode { get; private set; }
+    public string SelectedCityKey => TravelApp.FlightMap.TravelLocationCatalog.Find(SelectedAirportCode)?.BookingDestination;
+    private Transform popupLayer;
+    internal event Action SuggestionsOpened;
+    private readonly TravelApp.FlightMap.FlightLocation[] suggestionAirports = new TravelApp.FlightMap.FlightLocation[MaxSuggestions];
+    private readonly bool[] citySuggestions = new bool[MaxSuggestions];
+    private static IEnumerable<TravelApp.FlightMap.FlightLocation> Airports => TravelApp.FlightMap.TravelLocationCatalog.Airports.Where(a=>a.BookingDestination!=null);
+
+    public bool TrySelectAirportDestination(string airportCode)
     {
-        "Amsterdam, Netherlands",
-        "Athens, Greece",
-        "Auckland, New Zealand",
-        "Bali, Indonesia",
-        "Bangkok, Thailand",
-        "Barcelona, Spain",
-        "Beijing, China",
-        "Berlin, Germany",
-        "Bogotá, Colombia",
-        "Boston, Massachusetts",
-        "Buenos Aires, Argentina",
-        "Cairo, Egypt",
-        "Cancún, Mexico",
-        "Cape Town, South Africa",
-        "Chicago, Illinois",
-        "Copenhagen, Denmark",
-        "Delhi, India",
-        "Doha, Qatar",
-        "Dubai, United Arab Emirates",
-        "Dublin, Ireland",
-        "Hong Kong",
-        "Istanbul, Türkiye",
-        "Jakarta, Indonesia",
-        "Johannesburg, South Africa",
-        "Kuala Lumpur, Malaysia",
-        "Lagos, Nigeria",
-        "Lima, Peru",
-        "Lisbon, Portugal",
-        "London, United Kingdom",
-        "Los Angeles, California",
-        "Madrid, Spain",
-        "Manila, Philippines",
-        "Marrakech, Morocco",
-        "Melbourne, Australia",
-        "Mexico City, Mexico",
-        "Miami, Florida",
-        "Milan, Italy",
-        "Montreal, Canada",
-        "Mumbai, India",
-        "Nairobi, Kenya",
-        "New York, New York",
-        "Osaka, Japan",
-        "Paris, France",
-        "Prague, Czechia",
-        "Rio de Janeiro, Brazil",
-        "Rome, Italy",
-        "San Francisco, California",
-        "Santiago, Chile",
-        "Santorini, Greece",
-        "São Paulo, Brazil",
-        "Seoul, South Korea",
-        "Shanghai, China",
-        "Singapore",
-        "Stockholm, Sweden",
-        "Sydney, Australia",
-        "Taipei, Taiwan",
-        "Tokyo, Japan",
-        "Toronto, Canada",
-        "Vancouver, Canada",
-        "Vienna, Austria",
-        "Warsaw, Poland",
-        "Zurich, Switzerland"
-    };
+        var airport=Airports.FirstOrDefault(a=>string.Equals(a.code,airportCode,StringComparison.OrdinalIgnoreCase));
+        if(airport==null) return false;
+        bool alternate=Airports.First(a=>a.BookingDestination==airport.BookingDestination).code!=airport.code;
+        SelectAirport(airport,alternate);
+        return true;
+    }
 
     private TMP_InputField input;
     private RectTransform results;
@@ -83,17 +38,19 @@ public sealed class DestinationAutocomplete : MonoBehaviour
 
     internal void ConfigureOrigin(string[] airports)
     {
-        destinations = airports;
+        destinations = TravelApp.FlightMap.TravelLocationCatalog.BookingDestinations.ToArray();
         initialAirport = airports[0];
     }
 
     public string SelectedDestination { get; private set; }
-    public bool CanContinue => SelectedDestination != null;
+    public bool CanContinue => SelectedDestination != null && SelectedAirportCode != null;
     public event Action<bool> ContinuationChanged;
     private readonly TextMeshProUGUI[] labels = new TextMeshProUGUI[MaxSuggestions];
 
     private void Awake()
     {
+        if (initialAirport == null)
+            destinations = TravelApp.FlightMap.TravelLocationCatalog.BookingDestinations.ToArray();
         var field = CreateRect("Destination input", transform, Vector2.zero, Vector2.one);
         // TMP creates its caret on enable, after the text component is assigned.
         field.gameObject.SetActive(false);
@@ -128,6 +85,7 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         results.anchoredPosition = new Vector2(0, -4);
         for (int i = 0; i < labels.Length; i++)
         {
+            int index=i;
             var row = CreateRect("Suggestion", results, Vector2.up, Vector2.one);
             row.pivot = new Vector2(0.5f, 1);
             row.sizeDelta = new Vector2(0, RowHeight);
@@ -141,9 +99,11 @@ public sealed class DestinationAutocomplete : MonoBehaviour
             label.rectTransform.offsetMin = new Vector2(20, 0);
             label.rectTransform.offsetMax = new Vector2(-20, 0);
             labels[i] = label;
-            button.onClick.AddListener(() => SelectDestination(label.text));
+            button.onClick.AddListener(() => SelectAirport(suggestionAirports[index],!citySuggestions[index]));
         }
 
+        results.gameObject.AddComponent<Image>().color=Color.white;
+        var edge=results.gameObject.AddComponent<Outline>(); edge.effectColor=new Color32(220,228,240,255); edge.effectDistance=new Vector2(1,-1);
         results.gameObject.SetActive(false);
         input.onValueChanged.AddListener(OnSearchTextChanged);
         input.onSelect.AddListener(UpdateSuggestions);
@@ -167,9 +127,10 @@ public sealed class DestinationAutocomplete : MonoBehaviour
                 continue;
 
             string city = image.sprite.name.Substring("card-".Length);
-            string destination = Array.Find(destinations, entry => entry != null &&
-                CultureInfo.InvariantCulture.CompareInfo.Compare(
-                    entry.Split(',')[0], city, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) == 0);
+            string Key(string value)=>new string(value.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+            string cardKey=Key(city); if(cardKey=="istabul") cardKey="istanbul";
+            string destination=destinations.FirstOrDefault(entry=>
+                CultureInfo.InvariantCulture.CompareInfo.Compare(Key(entry.Split(',')[0]),cardKey,CompareOptions.IgnoreNonSpace)==0);
             if (destination == null)
                 continue;
 
@@ -188,7 +149,42 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         }
     }
 
+    internal string RawText => input.text;
+    internal void RestoreSelection(string selected, string rawText, string airportCode = null)
+    {
+        var airport=Resolve(selected,airportCode);
+        if(airport!=null)
+            SelectAirport(airport,selected.EndsWith("("+airport.code+")",StringComparison.Ordinal));
+        else
+        {
+            SelectedDestination=null; SelectedAirportCode=null;
+            input.SetTextWithoutNotify(rawText ?? ""); SetCardOutline(null);
+            results.gameObject.SetActive(false); ContinuationChanged?.Invoke(false);
+        }
+    }
+
+    private static TravelApp.FlightMap.FlightLocation Resolve(string label,string code=null)
+    {
+        if(string.IsNullOrEmpty(label)) return null;
+        return Airports.FirstOrDefault(a=>(code==null || a.code==code) &&
+            (label==a.BookingDestination || label==a.BookingDestination+" ("+a.code+")"));
+    }
+
+    private void SelectAirport(TravelApp.FlightMap.FlightLocation airport,bool explicitAirport,Outline cardOutline=null)
+    {
+        if(airport==null) return;
+        string label=airport.BookingDestination+((explicitAirport || initialAirport!=null) ? " ("+airport.code+")" : "");
+        SelectedAirportCode=airport.code;
+        ApplySelection(label,cardOutline);
+    }
+
     private void SelectDestination(string destination, Outline cardOutline = null)
+    {
+        var airport=Resolve(destination);
+        if(airport!=null) SelectAirport(airport,false,cardOutline);
+    }
+
+    private void ApplySelection(string destination, Outline cardOutline)
     {
         input.DeactivateInputField();
         input.SetTextWithoutNotify(destination);
@@ -205,7 +201,7 @@ public sealed class DestinationAutocomplete : MonoBehaviour
     {
         if (SelectedDestination != null && !string.Equals(value, SelectedDestination, StringComparison.Ordinal))
         {
-            SelectedDestination = null;
+            SelectedDestination = null; SelectedAirportCode = null;
             SetCardOutline(null);
             ContinuationChanged?.Invoke(CanContinue);
         }
@@ -229,57 +225,62 @@ public sealed class DestinationAutocomplete : MonoBehaviour
             results.gameObject.SetActive(false);
     }
 
-    private void UpdateSuggestions(string value)
+    internal void ConfigureCompact(Transform layer,string placeholderText)
     {
-        string prefix = value.Trim();
-        int count = 0;
-        if (prefix.Length > 0)
-        {
-            foreach (string destination in destinations)
-            {
-                if (string.IsNullOrWhiteSpace(destination) ||
-                    !MatchesDestination(destination, prefix))
-                    continue;
-
-                labels[count++].text = destination;
-                if (count == labels.Length)
-                    break;
-            }
-        }
-
-        for (int i = 0; i < labels.Length; i++)
-            labels[i].transform.parent.gameObject.SetActive(i < count);
-
-        results.sizeDelta = new Vector2(0, count * RowHeight);
-        if (count > 0)
-            transform.SetAsLastSibling();
-
-        results.gameObject.SetActive(count > 0);
+        popupLayer=layer;
+        input.textViewport.offsetMin=new Vector2(16,0); input.textViewport.offsetMax=new Vector2(-16,0);
+        input.textComponent.fontSize=20; ((TMP_Text)input.placeholder).fontSize=20;
+        input.textComponent.alignment=((TMP_Text)input.placeholder).alignment=TextAlignmentOptions.MidlineLeft;
+        ((TMP_Text)input.placeholder).text=placeholderText;
+        results.pivot=new Vector2(0,1); results.anchoredPosition=new Vector2(0,-6);
+        results.sizeDelta=new Vector2(240,0);
+        foreach(var label in labels) {label.fontSize=18; label.overflowMode=TextOverflowModes.Ellipsis;}
     }
 
-    private static bool MatchesDestination(string destination, string prefix)
+    internal void HideSuggestions() { if(results!=null) results.gameObject.SetActive(false); }
+    internal void DismissSuggestionsOutside(Vector2 point,Camera camera)
     {
-        if (destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return true;
+        if(results!=null && results.gameObject.activeSelf &&
+            !RectTransformUtility.RectangleContainsScreenPoint((RectTransform)transform,point,camera) &&
+            !RectTransformUtility.RectangleContainsScreenPoint(results,point,camera)) HideSuggestions();
+    }
 
-        int airportCode = destination.LastIndexOf('(');
-        if (airportCode >= 0 && destination.AsSpan(airportCode + 1).StartsWith(prefix.AsSpan(), StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        int separator = destination.LastIndexOf(',');
-        if (separator < 0)
-            return false;
-
-        for (int index = separator + 1; index < destination.Length; index++)
+    private void UpdateSuggestions(string value)
+    {
+        SuggestionsOpened?.Invoke();
+        int count=0;
+        var groups=Airports.GroupBy(a=>a.BookingDestination).Where(group=>group.Any(a=>MatchesAirport(a,value)))
+            .OrderByDescending(group=>group.Any(a=>string.Equals(a.code,value.Trim(),StringComparison.OrdinalIgnoreCase)))
+            .ThenBy(group=>group.Key,StringComparer.InvariantCultureIgnoreCase);
+        foreach(var group in groups)
         {
-            if (char.IsWhiteSpace(destination[index]) || !char.IsWhiteSpace(destination[index - 1]) && index != separator + 1)
-                continue;
-
-            if (destination.AsSpan(index).StartsWith(prefix.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                return true;
+            if(count>=labels.Length) break;
+            BindSuggestion(count++,group.First(),true);
+            foreach(var airport in group)
+            {
+                if(count>=labels.Length) break;
+                BindSuggestion(count++,airport,false);
+            }
         }
+        for(int i=0;i<labels.Length;i++) labels[i].transform.parent.gameObject.SetActive(i<count);
+        results.sizeDelta=new Vector2(popupLayer!=null ? 240 : 0,count*RowHeight);
+        if(count>0) { popupLayer?.SetAsLastSibling(); transform.SetAsLastSibling(); }
+        results.gameObject.SetActive(count>0);
+    }
 
-        return false;
+    private void BindSuggestion(int index,TravelApp.FlightMap.FlightLocation airport,bool city)
+    {
+        suggestionAirports[index]=airport; citySuggestions[index]=city;
+        var label=labels[index]; label.text=city ? airport.BookingDestination+" · City default ("+airport.code+")" : "    "+airport.code+" — "+airport.airport;
+        label.fontStyle=city ? FontStyles.Bold : FontStyles.Normal;
+        label.transform.parent.GetComponent<Image>().color=city ? new Color32(235,240,255,255) : Color.white;
+    }
+
+    private static bool MatchesAirport(TravelApp.FlightMap.FlightLocation airport,string query)
+    {
+        string text=airport.BookingDestination+" "+airport.city+" "+airport.country+" "+airport.code+" "+airport.airport;
+        var words=query.Replace("("," ").Replace(")"," ").Replace(","," ").Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
+        return words.All(word=>CultureInfo.InvariantCulture.CompareInfo.IndexOf(text,word,CompareOptions.IgnoreCase|CompareOptions.IgnoreNonSpace)>=0);
     }
 
     private static TextMeshProUGUI CreateLabel(string labelName, Transform parent)
