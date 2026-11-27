@@ -5,12 +5,22 @@ using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(Image))]
 public sealed class DestinationAutocomplete : MonoBehaviour
 {
     private const int MaxSuggestions = 8;
-    private const float RowHeight = 48f;
+    private const float RowHeight = 64f;
+    private const float PopupWidth = 640f;
+    private int suggestionCount, highlighted = -1;
+    private TMP_Text noResults, feedback;
+    private string fieldName = "destination";
+    private bool requireFeedback;
+    private FormFieldFeedback fieldFeedback;
+    private readonly TextMeshProUGUI[] airportNames = new TextMeshProUGUI[MaxSuggestions];
+    private readonly TextMeshProUGUI[] airportCodes = new TextMeshProUGUI[MaxSuggestions];
 
     private string[] destinations;
 
@@ -47,8 +57,10 @@ public sealed class DestinationAutocomplete : MonoBehaviour
     public event Action<bool> ContinuationChanged;
     private readonly TextMeshProUGUI[] labels = new TextMeshProUGUI[MaxSuggestions];
 
-    private void Awake()
+    private void Awake() => EnsureInitialized();
+    private void EnsureInitialized()
     {
+        if(input!=null)return;
         if (initialAirport == null)
             destinations = TravelApp.FlightMap.TravelLocationCatalog.BookingDestinations.ToArray();
         var field = CreateRect("Destination input", transform, Vector2.zero, Vector2.one);
@@ -79,6 +91,7 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         input.caretColor = new Color32(37, 99, 235, 255);
         input.caretBlinkRate = 0.85f;
         input.caretWidth = 3;
+        input.restoreOriginalTextOnEscape = false;
 
         results = CreateRect("Destination suggestions", transform, Vector2.zero, Vector2.right);
         results.pivot = new Vector2(0.5f, 1);
@@ -96,17 +109,37 @@ public sealed class DestinationAutocomplete : MonoBehaviour
             button.targetGraphic = background;
 
             var label = CreateLabel("City", row);
-            label.rectTransform.offsetMin = new Vector2(20, 0);
-            label.rectTransform.offsetMax = new Vector2(-20, 0);
+            label.rectTransform.offsetMin = new Vector2(100, 29);
+            label.rectTransform.offsetMax = new Vector2(-18, -4);
+            label.fontSize=18;
+            var detail=CreateLabel("Airport name",row);
+            detail.rectTransform.offsetMin=new Vector2(100,4); detail.rectTransform.offsetMax=new Vector2(-18,-33);
+            detail.fontSize=16; detail.color=new Color32(96,113,139,255);
+            detail.overflowMode=TextOverflowModes.Ellipsis;
+            airportNames[i]=detail;
+            var code=CreateLabel("Airport code",row);
+            code.rectTransform.anchorMin=code.rectTransform.anchorMax=Vector2.up;
+            code.rectTransform.pivot=Vector2.up;code.rectTransform.anchoredPosition=new Vector2(14,0);code.rectTransform.sizeDelta=new Vector2(76,RowHeight);
+            code.fontSize=19;code.fontStyle=FontStyles.Bold;code.color=new Color32(47,80,247,255);
+            airportCodes[i]=code;
+            button.transition=Selectable.Transition.None;
+            var hover=row.gameObject.AddComponent<AirportSuggestionHover>();
+            hover.Configure(()=>Highlight(index));
             labels[i] = label;
             button.onClick.AddListener(() => SelectAirport(suggestionAirports[index],!citySuggestions[index]));
         }
 
+        noResults=CreateLabel("No airports found",results);
+        noResults.rectTransform.offsetMin=new Vector2(20,0);noResults.rectTransform.offsetMax=new Vector2(-20,0);
+        noResults.fontSize=19;noResults.text="No airports found. Try a city, airport name or code.";
+        noResults.gameObject.SetActive(false);
         results.gameObject.AddComponent<Image>().color=Color.white;
         var edge=results.gameObject.AddComponent<Outline>(); edge.effectColor=new Color32(220,228,240,255); edge.effectDistance=new Vector2(1,-1);
         results.gameObject.SetActive(false);
         input.onValueChanged.AddListener(OnSearchTextChanged);
         input.onSelect.AddListener(UpdateSuggestions);
+        input.onSubmit.AddListener(_=>AcceptHighlighted());
+        input.onDeselect.AddListener(_=>RefreshFeedback());
         field.gameObject.SetActive(true);
         if (initialAirport == null)
             BindDestinationCards();
@@ -127,6 +160,7 @@ public sealed class DestinationAutocomplete : MonoBehaviour
                 continue;
 
             string city = image.sprite.name.Substring("card-".Length);
+            DestinationPhotos.Register(city == "Istabul" ? "Istanbul" : city, image.sprite);
             string Key(string value)=>new string(value.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
             string cardKey=Key(city); if(cardKey=="istabul") cardKey="istanbul";
             string destination=destinations.FirstOrDefault(entry=>
@@ -159,14 +193,14 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         {
             SelectedDestination=null; SelectedAirportCode=null;
             input.SetTextWithoutNotify(rawText ?? ""); SetCardOutline(null);
-            results.gameObject.SetActive(false); ContinuationChanged?.Invoke(false);
+            results.gameObject.SetActive(false); RefreshFeedback(); ContinuationChanged?.Invoke(false);
         }
     }
 
     private static TravelApp.FlightMap.FlightLocation Resolve(string label,string code=null)
     {
         if(string.IsNullOrEmpty(label)) return null;
-        return Airports.FirstOrDefault(a=>(code==null || a.code==code) &&
+        return Airports.FirstOrDefault(a=>(string.IsNullOrEmpty(code) || a.code==code) &&
             (label==a.BookingDestination || label==a.BookingDestination+" ("+a.code+")"));
     }
 
@@ -193,7 +227,8 @@ public sealed class DestinationAutocomplete : MonoBehaviour
 
         SelectedDestination = destination;
         input.textComponent.rectTransform.anchoredPosition = Vector2.zero;
-        results.gameObject.SetActive(false);
+        HideSuggestions();
+        requireFeedback=false;RefreshFeedback();
         ContinuationChanged?.Invoke(CanContinue);
     }
 
@@ -206,6 +241,7 @@ public sealed class DestinationAutocomplete : MonoBehaviour
             ContinuationChanged?.Invoke(CanContinue);
         }
 
+        RefreshFeedback();
         UpdateSuggestions(value);
     }
 
@@ -227,17 +263,63 @@ public sealed class DestinationAutocomplete : MonoBehaviour
 
     internal void ConfigureCompact(Transform layer,string placeholderText)
     {
+        EnsureInitialized();
         popupLayer=layer;
         input.textViewport.offsetMin=new Vector2(16,0); input.textViewport.offsetMax=new Vector2(-16,0);
         input.textComponent.fontSize=20; ((TMP_Text)input.placeholder).fontSize=20;
-        input.textComponent.alignment=((TMP_Text)input.placeholder).alignment=TextAlignmentOptions.MidlineLeft;
+        input.textComponent.alignment=((TMP_Text)input.placeholder).alignment=TextAlignmentOptions.Left;
         ((TMP_Text)input.placeholder).text=placeholderText;
-        results.pivot=new Vector2(0,1); results.anchoredPosition=new Vector2(0,-6);
-        results.sizeDelta=new Vector2(240,0);
+        fieldName=placeholderText.StartsWith("From",StringComparison.Ordinal)?"departure":placeholderText.StartsWith("Home",StringComparison.Ordinal)?"home":"destination";
+        results.anchorMin=results.anchorMax=Vector2.zero;results.pivot=Vector2.up;
+        results.anchoredPosition=new Vector2(0,-6);results.sizeDelta=new Vector2(PopupWidth,0);
         foreach(var label in labels) {label.fontSize=18; label.overflowMode=TextOverflowModes.Ellipsis;}
+        fieldFeedback=FormFieldFeedback.Attach(input);
+        feedback=fieldFeedback.Message;
+        RefreshFeedback();
     }
 
-    internal void HideSuggestions() { if(results!=null) results.gameObject.SetActive(false); }
+    internal void HideSuggestions() { if(results!=null) results.gameObject.SetActive(false); highlighted=-1; }
+    internal void FocusForCorrection()=>FormFieldFeedback.Focus(input);
+    internal void ShowValidationError(string text) {requireFeedback=true;fieldFeedback.SetError(text);}
+    internal bool ValidateAirport()
+    {
+        requireFeedback=true;RefreshFeedback();return CanContinue;
+    }
+    private void RefreshFeedback()
+    {
+        if(feedback==null)return;
+        bool invalid=!CanContinue && (requireFeedback || !string.IsNullOrWhiteSpace(input.text));
+        fieldFeedback.SetError(invalid?"Select a "+fieldName+" airport from the list.":null);
+        fieldFeedback.SetBorder(invalid && (requireFeedback || !input.isFocused));
+        feedback.color=requireFeedback || !input.isFocused ? new Color32(168,49,54,255):new Color32(96,113,139,255);
+    }
+    private void Update()
+    {
+        var keyboard=Keyboard.current;
+        if(keyboard==null || input==null || EventSystem.current==null)return;
+        if(keyboard.escapeKey.wasPressedThisFrame && results.gameObject.activeSelf) {HideSuggestions();return;}
+        if(EventSystem.current.currentSelectedGameObject!=input.gameObject && !input.isFocused)return;
+        if(keyboard.tabKey.wasPressedThisFrame) {HideSuggestions();return;}
+        bool down=keyboard.downArrowKey.wasPressedThisFrame, up=keyboard.upArrowKey.wasPressedThisFrame;
+        if(down || up)
+        {
+            if(!results.gameObject.activeSelf) UpdateSuggestions(input.text);
+            if(suggestionCount>0) Highlight(highlighted<0?(down?0:suggestionCount-1):(highlighted+(down?1:-1)+suggestionCount)%suggestionCount);
+        }
+    }
+    private void AcceptHighlighted()
+    {
+        if(results==null || !results.gameObject.activeSelf || suggestionCount==0)return;
+        int index=highlighted<0?0:highlighted;
+        SelectAirport(suggestionAirports[index],!citySuggestions[index]);
+    }
+    private void Highlight(int index)
+    {
+        highlighted=index;
+        for(int i=0;i<suggestionCount;i++) labels[i].transform.parent.GetComponent<Image>().color=
+            i==index?new Color32(218,228,255,255):citySuggestions[i]?new Color32(240,244,255,255):Color.white;
+    }
+
     internal void DismissSuggestionsOutside(Vector2 point,Camera camera)
     {
         if(results!=null && results.gameObject.activeSelf &&
@@ -263,17 +345,40 @@ public sealed class DestinationAutocomplete : MonoBehaviour
             }
         }
         for(int i=0;i<labels.Length;i++) labels[i].transform.parent.gameObject.SetActive(i<count);
-        results.sizeDelta=new Vector2(popupLayer!=null ? 240 : 0,count*RowHeight);
-        if(count>0) { popupLayer?.SetAsLastSibling(); transform.SetAsLastSibling(); }
-        results.gameObject.SetActive(count>0);
+        suggestionCount=count;highlighted=-1;
+        noResults.gameObject.SetActive(count==0);
+        results.sizeDelta=new Vector2(PopupWidth,Math.Max(1,count)*RowHeight);
+        results.anchorMin=results.anchorMax=Vector2.zero;results.pivot=Vector2.up;
+        PositionPopup();
+        popupLayer?.SetAsLastSibling(); transform.SetAsLastSibling();
+        results.gameObject.SetActive(true);
+        for(int i=0;i<count;i++)
+            if(!citySuggestions[i] && string.Equals(suggestionAirports[i].code,value.Trim(),StringComparison.OrdinalIgnoreCase)) { Highlight(i);break; }
     }
 
     private void BindSuggestion(int index,TravelApp.FlightMap.FlightLocation airport,bool city)
     {
         suggestionAirports[index]=airport; citySuggestions[index]=city;
-        var label=labels[index]; label.text=city ? airport.BookingDestination+" · City default ("+airport.code+")" : "    "+airport.code+" — "+airport.airport;
+        var label=labels[index];
+        label.text=city ? airport.city+", "+airport.country : airport.airport;
+        airportCodes[index].text=city?"CITY":airport.code;
+        airportNames[index].text=city ? "Uses "+airport.code+" — "+airport.airport : airport.city+", "+airport.country;
+        if(city) { label.rectTransform.offsetMin=new Vector2(100,29); label.rectTransform.offsetMax=new Vector2(-18,-4); }
+        labels[index].transform.parent.name=city?"City "+airport.code:"Airport "+airport.code;
         label.fontStyle=city ? FontStyles.Bold : FontStyles.Normal;
         label.transform.parent.GetComponent<Image>().color=city ? new Color32(235,240,255,255) : Color.white;
+    }
+
+    private void PositionPopup()
+    {
+        results.anchoredPosition=new Vector2(0,feedback!=null && !string.IsNullOrEmpty(feedback.text)?-42:-6);
+        var canvas=GetComponentInParent<Canvas>();
+        if(canvas==null)return;
+        var canvasRect=(RectTransform)canvas.transform;
+        var corners=new Vector3[4];results.GetWorldCorners(corners);
+        float right=canvasRect.InverseTransformPoint(corners[2]).x;
+        float excess=right-(canvasRect.rect.xMax-20);
+        if(excess>0)results.anchoredPosition+=new Vector2(-excess,0);
     }
 
     private static bool MatchesAirport(TravelApp.FlightMap.FlightLocation airport,string query)
@@ -305,4 +410,12 @@ public sealed class DestinationAutocomplete : MonoBehaviour
         rect.offsetMin = rect.offsetMax = Vector2.zero;
         return rect;
     }
+}
+
+// Hover updates the same highlighted option used by the keyboard; it owns no destination state.
+public sealed class AirportSuggestionHover : MonoBehaviour, IPointerEnterHandler
+{
+    private Action entered;
+    public void Configure(Action action) => entered=action;
+    public void OnPointerEnter(PointerEventData data) => entered?.Invoke();
 }

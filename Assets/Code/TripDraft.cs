@@ -6,12 +6,15 @@ using System.Linq;
 public sealed class TripDraft
 {
     public enum Step { Search, Dates, DepartureFlights, DepartureSeats, ReturnFlights, ReturnSeats, Review, Payment }
-    public string id, username, updatedUtc;
+    public string id, username, updatedUtc, title;
     public string origin, destination, originText, destinationText;
     public string originAirportCode,destinationAirportCode;
     public long departureTicks, returnTicks;
     public bool oneWay;
     public int passengers = 1;
+    public PassengerParty passengerDetails;
+    public int passengerDetailsVersion;
+    public PassengerParty PassengerDetails => passengerDetailsVersion>0?PassengerParty.Restore(passengerDetails,passengers):PassengerParty.Adults(passengers);
     public string cabin = "Economy";
     public Step step;
     public Leg outbound = new Leg(), inbound = new Leg();
@@ -20,12 +23,12 @@ public sealed class TripDraft
     public bool NeedsPayment => !string.IsNullOrWhiteSpace(origin) && !string.IsNullOrWhiteSpace(destination) &&
         !string.Equals(origin.Split(',')[0], destination.Split(',')[0], StringComparison.OrdinalIgnoreCase) &&
         Departure.HasValue && (oneWay || Return.HasValue && Return.Value > Departure.Value) &&
-        passengers >= 1 && passengers <= 6 && new[] { "Economy", "Premium Economy", "Business", "First" }.Contains(cabin) &&
+        PassengerDetails.IsValid && new[] { "Economy", "Premium Economy", "Business", "First" }.Contains(cabin) &&
         Complete(outbound) && (oneWay || Complete(inbound));
     private bool Complete(Leg leg)
     {
         if(leg==null || !leg.confirmed || string.IsNullOrEmpty(leg.airlineCode) || leg.farePerTraveler<=0) return false;
-        bool Valid(string[] seats)=>seats!=null && seats.Length==passengers && seats.All(s=>!string.IsNullOrWhiteSpace(s)) && seats.Distinct().Count()==passengers;
+        bool Valid(string[] seats)=>seats!=null && seats.Length==PassengerDetails.SeatCount && seats.All(s=>!string.IsNullOrWhiteSpace(s)) && seats.Distinct().Count()==PassengerDetails.SeatCount;
         int expected=FlightResultsPage.ExpectedSegments(leg.itineraryId);
         if(leg.segments==null || leg.segments.Length==0) return expected==1 && Valid(leg.seats);
         return leg.segments.Length==expected && leg.segments.All(s=>s!=null && Valid(s.seats) &&

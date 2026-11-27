@@ -1,4 +1,5 @@
 using TMPro;
+using System.Linq;
 using TravelApp;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,9 +22,12 @@ public sealed class DesktopLoginUI : MonoBehaviour
     [SerializeField] private GameObject firstTime;
     private bool registering;
     private UnityEngine.UI.Button guest;
+    private FormFieldFeedback usernameFeedback,emailFeedback,passwordFeedback;
 
     private void Awake()
     {
+        heading.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,580);
+        heading.textWrappingMode=TextWrappingModes.NoWrap;
         password.contentType = TMP_InputField.ContentType.Password;
         submit.onClick.AddListener(Submit);
         switchMode.onClick.AddListener(SwitchMode);
@@ -31,6 +35,11 @@ public sealed class DesktopLoginUI : MonoBehaviour
         AlignField(username, "Your username");
         AlignField(password, "Your password");
         AlignField(email, "you@example.com");
+        usernameFeedback=FormFieldFeedback.Attach(username,()=>UsernameError());
+        emailFeedback=FormFieldFeedback.Attach(email,()=>registering && !EmailAddressValidator.IsValid(email.text)?"Enter a valid email address.":null);
+        passwordFeedback=FormFieldFeedback.Attach(password,()=>PasswordError());
+        foreach(var field in new[]{username,email,password})field.onValueChanged.AddListener(_=>{
+            if(!usernameFeedback.HasError&&!passwordFeedback.HasError&&(!registering||!emailFeedback.HasError))status.text="";});
         username.characterLimit = 40;
         email.characterLimit = 120;
         var guestObject = Instantiate(switchMode.gameObject, switchMode.transform.parent);
@@ -88,6 +97,7 @@ public sealed class DesktopLoginUI : MonoBehaviour
     private void SwitchMode()
     {
         registering = !registering;
+        ClearErrors();
         password.text = "";
         status.text = "";
         Refresh();
@@ -111,17 +121,40 @@ public sealed class DesktopLoginUI : MonoBehaviour
         switchLabel.text = registering ? "Already registered? Sign in" : "Create an account";
     }
 
+
+    private string UsernameError()
+    {
+        string value=username.text.Trim();
+        if(value.Length==0)return "Enter your username.";
+        return registering && (value.Length<3||value.Length>40||value.Any(char.IsControl))?"Use 3–40 characters.":null;
+    }
+    private string PasswordError()=>string.IsNullOrEmpty(password.text)?"Enter your password.":
+        registering && (password.text.Length<4||password.text.Length>128)?"Use 4–128 characters.":null;
+    private void ClearErrors()
+    {usernameFeedback?.SetError(null);emailFeedback?.SetError(null);passwordFeedback?.SetError(null);}
+
     private void Submit()
     {
         var runtime = TravelAppRuntime.Instance;
         if (runtime?.Services == null || runtime.IsNavigating)
             return;
+        bool validUser=usernameFeedback.Validate();
+        bool validEmail=!registering||emailFeedback.Validate();
+        bool validPassword=passwordFeedback.Validate();
+        if(!validUser||!validEmail||!validPassword)
+        {status.text="Check the highlighted fields.";FormFieldFeedback.Focus(!validUser?username:!validEmail?email:password);return;}
         var result = registering
             ? runtime.Services.Accounts.Register(username.text, email.text, password.text)
             : runtime.Services.Accounts.Login(username.text, password.text);
         status.text = result.message;
         if (!result.success)
+        {
+            if(result.message.Contains("username is already")){usernameFeedback.SetError("That username is already in use.");FormFieldFeedback.Focus(username);}
+            else if(result.message.Contains("incorrect"))
+            {usernameFeedback.SetError("Check username and password.");passwordFeedback.SetError("Check username and password.");FormFieldFeedback.Focus(username);}
             return;
+        }
+        ClearErrors();
         if (registering)
         {
             runtime.Services.Accounts.Logout();

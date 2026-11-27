@@ -11,9 +11,11 @@ using static DateSelectionPage;
 public sealed class TripReviewPage : MonoBehaviour
 {
     static readonly Color Ink=new Color32(29,40,59,255), Muted=new Color32(96,113,139,255),
-        Blue=new Color32(47,80,247,255), PaleBlue=new Color32(235,240,255,255), Border=new Color32(222,230,241,255);
+        Blue=new Color32(47,80,247,255), PaleBlue=new Color32(235,240,255,255), Border=new Color32(222,230,241,255),
+        Done=new Color32(38,151,119,255), Pending=new Color32(166,98,20,255);
     DateSelectionPage style;
-    TMP_Text itinerary,total,priceRows,priceValues,travelerSummary,error;
+    TMP_Text total,priceRows,priceValues,travelerSummary,error,travelerStatus,continueLabel;
+    RectTransform priceEdge,priceSurface,priceDivider,breakdownNote,totalDivider,grandLabel,travelerLink,continueRect;
     RectTransform legContent,drawer,drawerContent,structuredDetails;
     ScrollRect legScroll,drawerScroll;
     GameObject overlay;
@@ -22,6 +24,8 @@ public sealed class TripReviewPage : MonoBehaviour
     SeatSelectionPage.Booking outbound,inbound,drawerBooking;
     Func<bool> continueAction;
     LegCard departureCard,returnCard;
+    TravelerDetailsForm travelerForm;
+    RectTransform travelerRoot;
     public int GrandTotal { get; private set; }
     public int DisplayBaseFare { get; private set; }
     public int DisplayTaxes { get; private set; }
@@ -39,46 +43,77 @@ public sealed class TripReviewPage : MonoBehaviour
     {
         style=theme; continueAction=continueToPayment;
         var background=gameObject.AddComponent<Image>(); background.color=new Color32(245,247,250,255); background.raycastTarget=false;
-        var summary=style.Panel("Booking progress",transform,60,24,1416,76);
-        itinerary=Label("Route and dates",summary,24,24,600,32,"",20,Ink,true);
-        var steps=new[]{"Review","Passengers","Seats","Options","Payment"};
-        for(int i=0;i<steps.Length;i++)
-        {
-            float x=654+i*145;
-            ReviewIcon.Add(summary,x,25,24,(ReviewIcon.Symbol)i,i==0?Blue:Muted);
-            if(i==2 || i==4)
-            {
-                var b=style.Control("Progress "+steps[i],summary,x+28,17,112,42,steps[i],Color.clear,Muted,17,2);
-                if(i==2) b.onClick.AddListener(()=>editDepartureSeats()); else b.onClick.AddListener(Continue);
-            }
-            else Label("Progress "+steps[i],summary,x+28,17,112,42,steps[i],17,i==0?Blue:Muted,i==0,TextAlignmentOptions.MidlineLeft);
-            if(i<4) style.Shape("Step connector",summary,x+127,38,12,1,Border);
-        }
         Label("Review guidance",transform,60,119,700,34,"Review your flights and fare before continuing",23,Ink,true);
-        Control("Edit route",transform,1170,115,142,46,editRoute);
-        Control("Edit dates",transform,1324,115,152,46,editDates);
+        Link("Edit route",transform,1170,115,142,46,editRoute);
+        Link("Edit dates",transform,1324,115,152,46,editDates);
         var view=style.Shape("Review itinerary viewport",transform,60,176,934,700,Color.clear); view.GetComponent<Image>().raycastTarget=true;
         view.anchorMin=Vector2.zero;view.anchorMax=new Vector2(0,1);view.offsetMin=new Vector2(60,30);view.offsetMax=new Vector2(994,-176);
         legScroll=MakeScroll(view,"Legs",out legContent);
         departureCard=BuildLeg("Departure",editDeparture,editDepartureSeats);
         returnCard=BuildLeg("Return",editReturn,editReturnSeats);
-        var price=style.Panel("Trip total",transform,1010,176,466,430);
+        travelerRoot=NewRect("Traveler details",legContent);travelerRoot.anchorMin=Vector2.up;travelerRoot.anchorMax=Vector2.one;travelerRoot.pivot=Vector2.up;
+        travelerForm=travelerRoot.gameObject.AddComponent<TravelerDetailsForm>();
+        travelerForm.DetailsChanged+=()=>{if(outbound?.Passengers.HasValidDetails==true)error.text="";RefreshTravelerStatus();};
+        var price=style.Panel("Trip total",transform,1010,176,466,500);priceSurface=price;priceEdge=(RectTransform)price.parent;
         Label("Title",price,26,22,410,38,"Price summary",27,Ink,true);
-        travelerSummary=Label("Passengers",price,26,72,410,58,"",19,Muted,false);
-        style.Shape("Price divider",price,26,141,410,1,Border);
-        priceRows=Label("Price components",price,26,162,290,118,"Base airfare\nTaxes & fees\nAdditional charges",19,Ink,false);
+        travelerSummary=Label("Passengers",price,26,72,410,126,"",18,Muted,false);
+        priceDivider=style.Shape("Price divider",price,26,212,410,1,Border);
+        priceRows=Label("Price components",price,26,230,290,98,"Base airfare\nTaxes & fees\nAdditional charges",19,Ink,false);
         priceRows.lineSpacing=14;
-        priceValues=Label("Price component values",price,306,162,130,118,"",19,Ink,false,TextAlignmentOptions.TopRight); priceValues.lineSpacing=14;
-        Label("Breakdown note",price,26,279,410,42,"Illustrative breakdown · same total as checkout.\nOptional checked bags have not been added.",15,Muted,false);
-        style.Shape("Total divider",price,26,335,410,1,Border);
-        Label("Grand total label",price,26,353,190,42,"Grand total",23,Ink,true);
-        total=Label("Estimated total",price,212,349,224,48,"",30,Ink,true,TextAlignmentOptions.Right);
+        priceValues=Label("Price component values",price,306,230,130,98,"",19,Ink,false,TextAlignmentOptions.TopRight); priceValues.lineSpacing=14;
+        breakdownNote=Label("Breakdown note",price,26,338,410,50,"Illustrative breakdown · same total as checkout.\nOptional checked bags have not been added.",15,Muted,false).rectTransform;
+        totalDivider=style.Shape("Total divider",price,26,405,410,1,Border);
+        grandLabel=Label("Grand total label",price,26,425,190,42,"Grand total",23,Ink,true).rectTransform;
+        total=Label("Estimated total",price,212,421,224,48,"",30,Ink,true,TextAlignmentOptions.Right);
         total.enableAutoSizing=true;total.fontSizeMin=24;total.fontSizeMax=30;
-        style.Control("Continue to Payment",transform,1010,624,466,54,"Continue to Payment",Blue,Color.white,22,1.6f).onClick.AddListener(Continue);
-        error=Label("Booking validation",transform,1010,692,466,58,"",17,new Color32(168,49,54,255),false);
+        // One status line replaces the old "Traveler details" pill: it says what's missing and jumps to the form.
+        var status=Link("Traveler details",transform,1010,694,466,44,()=>travelerForm.FocusFirst());travelerLink=(RectTransform)status.transform;
+        travelerStatus=status.GetComponentInChildren<TMP_Text>();travelerStatus.alignment=TextAlignmentOptions.MidlineLeft;travelerStatus.margin=new Vector4(4,0,4,0);travelerStatus.fontStyle=FontStyles.Normal;
+        var proceed=style.Control("Continue to Payment",transform,1010,748,466,54,"Continue to Payment",Blue,Color.white,22,1.6f);proceed.onClick.AddListener(Continue);
+        continueRect=(RectTransform)proceed.transform;continueLabel=proceed.GetComponentInChildren<TMP_Text>();
+        error=Label("Booking validation",transform,1010,814,466,58,"",17,new Color32(168,49,54,255),false);
         BuildDrawer();
     }
-    void Continue() { error.text=continueAction()?"":"Complete your flight and seat selections before continuing."; }
+    void Continue()
+    {
+        if(!ValidateTravelerDetails()){error.text="Complete the highlighted traveler and contact fields.";return;}
+        error.text=continueAction()?"":"Complete your flight and seat selections before continuing.";
+    }
+    // Secondary actions are quiet text links so the page has one obvious next step.
+    UnityEngine.UI.Button Link(string name,Transform parent,float x,float y,float width,float height,Action action)
+    {
+        var b=style.Control(name,parent,x,y,width,height,name,Color.clear,Blue,18,2);b.onClick.AddListener(()=>action());
+        var hover=b.gameObject.AddComponent<LinkHover>();hover.Bind(b.GetComponent<Image>());
+        return b;
+    }
+    void RefreshTravelerStatus()
+    {
+        if(travelerStatus==null)return;
+        bool ready=outbound?.Passengers.HasValidDetails==true;
+        string status=ready?"Traveler details complete":"Traveler details  ·  Required before payment";
+        if(travelerStatus.text==status)return;
+        travelerStatus.text=status;travelerStatus.color=ready?Done:Pending;
+        continueLabel.text=ready?"Continue to Payment":"Add traveler details";
+    }
+    // Details can also change from a resumed draft, so keep the status line in step every frame (cheap: text only changes on a flip).
+    void Update()=>RefreshTravelerStatus();
+    void LayoutPrice()
+    {
+        if(travelerSummary.font==null)travelerSummary.font=TMP_Settings.defaultFontAsset;
+        float summary=Mathf.Max(24,travelerSummary.GetPreferredValues(travelerSummary.text,410,0).y);
+        travelerSummary.rectTransform.sizeDelta=new Vector2(410,summary);
+        float y=72+summary+18;
+        priceDivider.anchoredPosition=new Vector2(26,-y);y+=18;
+        priceRows.rectTransform.anchoredPosition=new Vector2(26,-y);priceValues.rectTransform.anchoredPosition=new Vector2(306,-y);y+=108;
+        breakdownNote.anchoredPosition=new Vector2(26,-y);y+=62;
+        totalDivider.anchoredPosition=new Vector2(26,-y);y+=20;
+        grandLabel.anchoredPosition=new Vector2(26,-y);total.rectTransform.anchoredPosition=new Vector2(212,-(y-4));y+=72;
+        priceEdge.sizeDelta=new Vector2(466,y);priceSurface.sizeDelta=new Vector2(463,y-3);
+        float below=176+y+18;
+        travelerLink.anchoredPosition=new Vector2(1010,-below);continueRect.anchoredPosition=new Vector2(1010,-(below+54));
+        error.rectTransform.anchoredPosition=new Vector2(1010,-(below+120));
+    }
+    internal bool ValidateTravelerDetails()=>travelerForm!=null && travelerForm.ValidateAll();
     UnityEngine.UI.Button Control(string name,Transform parent,float x,float y,float width,float height,Action action)
     {
         var b=style.Control(name,parent,x,y,width,height,name,PaleBlue,Blue,18,2); b.onClick.AddListener(()=>action()); return b;
@@ -102,31 +137,32 @@ public sealed class TripReviewPage : MonoBehaviour
         c.Timeline=NewRect("Route timeline",c.Panel); c.Timeline.anchorMin=c.Timeline.anchorMax=c.Timeline.pivot=Vector2.up;
         c.Timeline.anchoredPosition=new Vector2(230,-192); c.Timeline.sizeDelta=new Vector2(420,78);
         c.Details=Label("Details",c.Panel,26,285,850,70,"",18,Muted,false);
-        c.FlightDetails=Control("Flight details",c.Panel,696,78,184,44,()=>OpenFlight(c==departureCard?outbound:inbound));
+        c.FlightDetails=Link("Flight details",c.Panel,696,78,184,44,()=>OpenFlight(c==departureCard?outbound:inbound));
         DropdownChevron.Attach(c.FlightDetails).PointRight();
-        Control("Edit flight",c.Panel,576,20,144,44,editFlight); Control("Edit seats",c.Panel,736,20,144,44,editSeats);
+        Link("Edit flight",c.Panel,576,20,144,44,editFlight); Link("Edit seats",c.Panel,736,20,144,44,editSeats);
         c.Rules=Label("Basic fare rules",c.Panel,26,386,850,72,"",17,Muted,false);
-        c.FareRules=Control("Fare rules",c.Panel,696,128,184,44,()=>OpenFare(c==departureCard?outbound:inbound));
+        c.FareRules=Link("Fare rules",c.Panel,696,128,184,44,()=>OpenFare(c==departureCard?outbound:inbound));
         DropdownChevron.Attach(c.FareRules).PointRight(); return c;
     }
     public void ShowBooking(SeatSelectionPage.Booking departure,SeatSelectionPage.Booking returning)
     {
         CloseDrawer(); outbound=departure; inbound=returning; error.text="";
-        var segments=departure.Flight.Segments;
-        string route=segments.First().OriginCode+" → "+segments.Last().DestinationCode;
-        itinerary.text=route+"  |  "+departure.DepartureDate.ToString("MMM d",CultureInfo.InvariantCulture)+
-            (returning==null?"":" – "+returning.DepartureDate.ToString("MMM d",CultureInfo.InvariantCulture))+"  |  "+Travelers(departure.PassengerCount);
         float first=ShowLeg(departureCard,departure,"Departure");
         returnCard.Panel.parent.gameObject.SetActive(returning!=null);
         float height=first;
         if(returning!=null) { ((RectTransform)returnCard.Panel.parent).anchoredPosition=new Vector2(0,-first-22); height+=22+ShowLeg(returnCard,returning,"Return"); }
-        legContent.sizeDelta=new Vector2(0,Mathf.Max(legScroll.viewport.rect.height,height));legScroll.verticalNormalizedPosition=1;
+        travelerRoot.anchoredPosition=new Vector2(0,-height-22);
+        travelerForm.Bind(style,departure.Passengers,formHeight=>{legContent.sizeDelta=new Vector2(0,Mathf.Max(legScroll.viewport.rect.height,height+22+formHeight));});
+        legContent.sizeDelta=new Vector2(0,Mathf.Max(legScroll.viewport.rect.height,height+22+travelerForm.Height));legScroll.verticalNormalizedPosition=1;
         // Use the same snapshot/calculation as the payment handoff; this is display-only allocation.
         GrandTotal=new PaymentBooking(departure,returning).EstimatedTotal;
         DisplayTaxes=Mathf.RoundToInt(GrandTotal*.12f);DisplayBaseFare=GrandTotal-DisplayTaxes;
-        int perTraveler=departure.FarePerTraveler+(returning?.FarePerTraveler??0);
-        travelerSummary.text=Travelers(departure.PassengerCount)+" · "+departure.Cabin+"\n"+$"${perTraveler:N0} per traveler · "+(returning==null?"One way":"Round trip");
+        var party=departure.Passengers;
+        travelerSummary.text=Travelers(departure.PassengerCount)+" · "+departure.Cabin+"\n"+
+            string.Join("\n",Enum.GetValues(typeof(PassengerParty.Category)).Cast<PassengerParty.Category>().Where(c=>party.CountFor(c)>0).Select(c=>
+                $"{party.CountFor(c)} {PassengerParty.Plural(c,party.CountFor(c))} × ${party.FareFor(departure.FarePerTraveler,c)+(returning==null?0:party.FareFor(returning.FarePerTraveler,c)):N0}"));
         priceValues.text=$"${DisplayBaseFare:N0}\n${DisplayTaxes:N0}\n$0";total.text=$"${GrandTotal:N0} USD";
+        LayoutPrice();RefreshTravelerStatus();
     }
     float ShowLeg(LegCard c,SeatSelectionPage.Booking booking,string direction)
     {
@@ -143,7 +179,7 @@ public sealed class TripReviewPage : MonoBehaviour
             var stop=flight.Layovers[i];float x=(i+1)*404f/segments.Count-64;
             Label("Connection "+i,c.Timeline,x,36,144,42,stop.AirportCode+"\n"+FlightResultsPage.DurationLabel(stop.DurationMinutes)+" layover",15,Muted,false,TextAlignmentOptions.Center);
         }
-        c.Details.text=flight.Airline+$" · ${booking.FarePerTraveler:N0} per traveler · Leg total ${booking.FarePerTraveler*booking.PassengerCount:N0}\n"+string.Join("\n",segments.Select((s,i)=>s.OriginCode+" → "+s.DestinationCode+" · "+string.Join(" · ",booking.SeatsForSegment(i).Select((seat,t)=>"Seat "+seat))));
+        c.Details.text=flight.CarrierLabel+$" · ${booking.FarePerTraveler:N0} per adult · Leg total ${booking.EstimatedTotal:N0}\n"+string.Join("\n",segments.Select((s,i)=>s.OriginCode+" → "+s.DestinationCode+" · "+s.Airline+" "+s.FlightNumber+" · "+string.Join(" · ",booking.SeatsForSegment(i).Select((seat,t)=>"Seat "+seat))));
         if(c.Details.font==null)c.Details.font=TMP_Settings.defaultFontAsset;
         float body=Mathf.Max(58,c.Details.GetPreferredValues(c.Details.text,850,0).y+10);
         c.Details.rectTransform.sizeDelta=new Vector2(850,body);
@@ -191,7 +227,7 @@ public sealed class TripReviewPage : MonoBehaviour
         drawerBody.gameObject.SetActive(false);
         if(structuredDetails!=null){structuredDetails.gameObject.SetActive(false);Destroy(structuredDetails.gameObject);}
         structuredDetails=NewRect("Structured flight details",drawerContent);structuredDetails.anchorMin=Vector2.up;structuredDetails.anchorMax=Vector2.one;structuredDetails.pivot=Vector2.up;
-        float height=ItineraryDetailsView.Build(style,structuredDetails,594,booking.Flight,booking.Cabin,booking.FarePerTraveler,booking.PassengerCount,booking.SegmentSeats);
+        float height=ItineraryDetailsView.Build(style,structuredDetails,594,booking.Flight,booking.Cabin,booking.FarePerTraveler,booking.PassengerCount,booking.SegmentSeats,booking.Passengers);
         drawerContent.sizeDelta=new Vector2(0,Mathf.Max(drawerScroll.viewport.rect.height,height));drawerScroll.verticalNormalizedPosition=1;
     }
 
@@ -232,4 +268,14 @@ public sealed class TripReviewPage : MonoBehaviour
     {
         var rect=(RectTransform)new GameObject(name,typeof(RectTransform)).transform;rect.gameObject.layer=parent.gameObject.layer;rect.SetParent(parent,false);rect.anchorMin=rect.anchorMax=Vector2.zero;rect.sizeDelta=Vector2.zero;return rect;
     }
+}
+
+// Link-style buttons get a pale pill only while hovered, so they read as text until pointed at.
+public sealed class LinkHover : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler, UnityEngine.EventSystems.IPointerExitHandler
+{
+    Image surface;
+    public void Bind(Image image) {surface=image;}
+    public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData _) {if(surface!=null)surface.color=new Color32(235,240,255,255);}
+    public void OnPointerExit(UnityEngine.EventSystems.PointerEventData _) {if(surface!=null)surface.color=Color.clear;}
+    void OnDisable() {if(surface!=null)surface.color=Color.clear;}
 }

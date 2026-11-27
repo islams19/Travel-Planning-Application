@@ -10,6 +10,20 @@ namespace TravelApp
         string currentName;
         public string Username => currentName;
         public string Email => Current?.email ?? CurrentUser?.email;
+        public string DisplayName => string.IsNullOrWhiteSpace(Current?.displayName)?Username??"Guest User":Current.displayName;
+        public TravelPreferences Preferences => TravelPreferences.Normalize(IsLoggedIn?Current?.preferences:app.Data.guestPreferences);
+        public Result SaveProfile(string name,string email,TravelPreferences preferences)
+        {
+            name=(name??"").Trim();email=(email??"").Trim();
+            if(IsLoggedIn && (name.Length<1 || name.Length>80 || name.Any(char.IsControl)))return Result.Fail("Enter a name of 1–80 characters.");
+            if(IsLoggedIn && !EmailAddressValidator.IsValid(email))return Result.Fail("Enter a valid email address.");
+            if(TravelApp.FlightMap.TravelLocationCatalog.Find(preferences?.homeAirportCode)?.BookingDestination==null)return Result.Fail("Select a home airport from the suggestions.");
+            var normalized=TravelPreferences.Normalize(preferences);
+            return app.Commit(()=>{
+                if(IsLoggedIn){Current.displayName=name;Current.email=email;Current.preferences=normalized;}
+                else app.Data.guestPreferences=normalized;
+            },"Profile saved.");
+        }
         public bool IsLoggedIn => currentName != null;
         public User CurrentUser => app.Catalog.users.Find(u => u != null && Same(u.username, currentName));
         public bool IsAdmin => CurrentUser != null && CurrentUser.role == UserRole.Admin;

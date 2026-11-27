@@ -14,7 +14,8 @@ public sealed class SidebarNavigation : MonoBehaviour
     private DestinationAutocomplete originSearch;
     private string bookingOrigin;
     private string bookingDestination;
-    private static string DefaultOrigin => TravelApp.FlightMap.TravelLocationCatalog.Find("JFK").BookingDestination+" (JFK)";
+    private static string DefaultOriginCode => TravelApp.TravelAppRuntime.Instance?.Services?.Accounts.Preferences.homeAirportCode??"JFK";
+    private static string DefaultOrigin => TravelApp.FlightMap.TravelLocationCatalog.Find(DefaultOriginCode).BookingDestination+" ("+DefaultOriginCode+")";
     private CompactFlightSearch compactSearch;
     private DestinationAutocomplete destinationSearch;
     private FlightResultsPage flightResults;
@@ -33,29 +34,39 @@ public sealed class SidebarNavigation : MonoBehaviour
     private PaymentBooking paymentBooking;
     private SharedProfileMenu profileMenu;
     private SavedTripsPage savedTrips;
+    private ProfilePage profilePage;
     private string activeDraftId;
     private TripDraft.Step bookingStep;
+    private BookingProgress[] progressViews;
+    private AppNotification notifications;
+    private AppDialog dialog;
+    private SidebarItemVisual[] sidebarItems;
     private float subtitleRightOffset;
     private TextWrappingModes subtitleWrapping;
 
     private static readonly string[] Titles =
     {
-        "Search flight destinations", "Explore World", "My Trips", "Settings"
+        "Search flight destinations", "Explore World", "My Trips", "Profile"
     };
 
     private static readonly string[] Subtitles =
     {
-        "LET'S FIND A TRIP", "DISCOVER DESTINATIONS", "YOUR TRIPS", "YOUR PREFERENCES"
+        "LET'S FIND A TRIP", "DISCOVER DESTINATIONS", "YOUR TRIPS", "YOUR ACCOUNT"
     };
 
     private void Awake()
     {
         subtitleRightOffset = headerSubtitle.rectTransform.offsetMax.x;
         subtitleWrapping = headerSubtitle.textWrappingMode;
+        buttons[0].transform.parent.gameObject.AddComponent<SidebarBranding>().Build(buttons);
+        sidebarItems=new SidebarItemVisual[buttons.Length];
         for (int i = 0; i < buttons.Length; i++)
         {
+            sidebarItems[i]=buttons[i].gameObject.AddComponent<SidebarItemVisual>();
+            sidebarItems[i].Configure(buttons[i]);
+            if(i==3)buttons[i].gameObject.SetActive(false);
             int pageIndex = i;
-            buttons[i].onClick.AddListener(() => ShowPage(pageIndex));
+            buttons[i].onClick.AddListener(() => RequestPage(pageIndex));
         }
 
         ShowPage(0);
@@ -71,11 +82,36 @@ public sealed class SidebarNavigation : MonoBehaviour
         return TravelApp.Result.Ok("Destination selected.");
     }
 
-    public void OpenSettings() => ShowPage(3);
+    // Booking pages past the search form hold flight and seat choices that aren't in My Trips yet.
+    private bool OnBookingStep => new Component[]{flightResults,seatPage,returnResults,returnSeats,tripReview,paymentPage}
+        .Any(page=>page!=null && page.gameObject.activeInHierarchy);
+
+    private void RequestPage(int index)
+    {
+        if (dialog == null || !OnBookingStep || !HasUnsavedBooking) { ShowPage(index); return; }
+        dialog.Show("Leave this booking?",
+            "Your flights and seats aren't saved to My Trips yet. Save now to pick up where you left off later.",
+            new[]{"Stay","Save and leave","Leave without saving"}, choice =>
+            {
+                if (choice == 0) return true;
+                if (choice == 1)
+                {
+                    var result = SaveActiveDraft();
+                    if (!result.success) { dialog.Error(result.message); return false; }
+                }
+                ShowPage(index); return true;
+            });
+    }
+
+    public void OpenSettings() => OpenProfile(); // Compatibility for older internal links.
+    public void OpenProfile() => ShowPage(3);
     public void OpenSavedTrips() => ShowPage(2);
+    // User-initiated links (sidebar, profile menu) ask before leaving a booking in progress.
+    public void RequestProfile() => RequestPage(3);
 
     private void HideAllPages()
     {
+        SelectSidebarPage(0);
         profileMenu?.Close();
         if (savedTrips != null) savedTrips.gameObject.SetActive(false);
         foreach (var page in pages)
@@ -103,7 +139,9 @@ public sealed class SidebarNavigation : MonoBehaviour
     {
         HideAllPages();
         pages[index].SetActive(true);
+        SelectSidebarPage(index);
         if (index == 2 && savedTrips != null) savedTrips.Refresh();
+        if(index==3) {SelectSidebarPage(-1);profilePage?.Reload();}
         if (index == 0) bookingStep = TripDraft.Step.Search;
 
         if(index==0) compactSearch?.Refresh();
@@ -111,6 +149,12 @@ public sealed class SidebarNavigation : MonoBehaviour
         SetSubtitleRightOffset(subtitleRightOffset);
         headerSubtitle.textWrappingMode = subtitleWrapping;
         headerSubtitle.text = Subtitles[index];
+    }
+
+    private void SelectSidebarPage(int index)
+    {
+        if(sidebarItems==null)return;
+        for(int i=0;i<sidebarItems.Length;i++) sidebarItems[i]?.SetSelected(i==index);
     }
 
     private void Start()
@@ -121,6 +165,8 @@ public sealed class SidebarNavigation : MonoBehaviour
             return;
 
         datePage.Build();
+        notifications=AppNotification.Get(datePage,headerTitle.transform);
+        dialog=AppDialog.Get(datePage,headerTitle.transform);
         profileMenu = gameObject.AddComponent<SharedProfileMenu>();
         profileMenu.Build(datePage, this, headerTitle.GetComponentInParent<Canvas>());
         var exploreSelector = pages[1].GetComponentInChildren<TravelApp.FlightMap.FlightLocationSelector>(true);
@@ -154,11 +200,11 @@ public sealed class SidebarNavigation : MonoBehaviour
 
         AddSaveAction(datePage.transform, 84, 802, TripDraft.Step.Dates);
         AddSaveAction(flightResults.transform, 600, 199, TripDraft.Step.DepartureFlights);
-        AddSaveAction(seatPage.transform.Find("Seat viewport/Scrollable seat content"), 940, 880, TripDraft.Step.DepartureSeats);
+        AddSaveAction(seatPage.transform, 940, 840, TripDraft.Step.DepartureSeats);
         AddSaveAction(returnResults.transform, 600, 199, TripDraft.Step.ReturnFlights);
-        AddSaveAction(returnSeats.transform.Find("Seat viewport/Scrollable seat content"), 940, 880, TripDraft.Step.ReturnSeats);
+        AddSaveAction(returnSeats.transform, 940, 840, TripDraft.Step.ReturnSeats);
         AddSaveAction(tripReview.transform, 780, 115, TripDraft.Step.Review);
-        AddSaveAction(paymentPage.transform, 330, 26, TripDraft.Step.Payment);
+        AddSaveAction(paymentPage.transform, 330, 62, TripDraft.Step.Payment);
         datePage.DatesConfirmed += (departure,returning) =>
         {
             if(compactSearch!=null && compactSearch.IsCalendarOpen) compactSearch.CloseCalendar();
@@ -168,6 +214,39 @@ public sealed class SidebarNavigation : MonoBehaviour
         compactSearch.Build(datePage,flightResults,originSearch,destinationSearch,()=>HasValidRoute,
             ()=>ShowFlightResults(datePage.Departure.Value,datePage.Return));
         AddSaveAction(compactSearch.SearchSurface,1214,20,TripDraft.Step.Search);
+        foreach(Transform child in pages[3].transform)child.gameObject.SetActive(false);
+        profilePage=pages[3].AddComponent<ProfilePage>();profilePage.Build(datePage,ApplyExplorePreferences);
+        ApplyExplorePreferences();
+        flightResults.RestoreOptions(1,TravelApp.TravelAppRuntime.Instance.Services.Accounts.Preferences.cabinClass,null);
+        compactSearch.Refresh();
+        progressViews = new[] {
+            BookingProgress.Build(datePage, searchPage.transform),
+            BookingProgress.Build(datePage, flightResults.transform),
+            BookingProgress.Build(datePage, seatPage.transform),
+            BookingProgress.Build(datePage, returnResults.transform),
+            BookingProgress.Build(datePage, returnSeats.transform),
+            BookingProgress.Build(datePage, tripReview.transform,24),
+            BookingProgress.Build(datePage, paymentPage.transform)
+        };
+    }
+
+
+    private void ApplyExplorePreferences()
+    {
+        var information=pages[1].GetComponentInChildren<TravelApp.FlightMap.FlightInformationManager>(true);
+        information?.SetDistanceUnits(TravelApp.TravelAppRuntime.Instance.Services.Accounts.Preferences.distanceUnits=="Miles");
+    }
+
+    private void LateUpdate()
+    {
+        if(progressViews == null) return;
+        string Code(DestinationAutocomplete field) => string.IsNullOrEmpty(field?.SelectedAirportCode) ? "—" : field.SelectedAirportCode;
+        string context=Code(originSearch)+" → "+Code(destinationSearch)+"  |  "+
+            (datePage.Departure.HasValue ? datePage.Departure.Value.ToString("MMM d",CultureInfo.InvariantCulture) : "Choose dates")+
+            (!datePage.IsOneWay && datePage.Return.HasValue ? " – "+datePage.Return.Value.ToString("MMM d",CultureInfo.InvariantCulture) : "")+
+            "  |  "+flightResults.PassengerCount+" traveler"+(flightResults.PassengerCount==1?"":"s");
+        foreach(var view in progressViews)
+            if(view.gameObject.activeInHierarchy) view.Show(bookingStep,!datePage.IsOneWay,context);
     }
 
     private void BuildOriginField(Transform searchPage)
@@ -313,6 +392,8 @@ public sealed class SidebarNavigation : MonoBehaviour
             inbound.PassengerCount != outbound.PassengerCount || inbound.Cabin != outbound.Cabin))
             return false;
 
+        if(!flightResults.Passengers.HasValidDetails)return false;
+
         // Reuse an unchanged handoff, including after Back/sidebar navigation, so payment is idempotent.
         if (paymentBooking == null || !paymentBooking.Matches(outbound, inbound))
             paymentBooking = new PaymentBooking(outbound, inbound);
@@ -373,6 +454,15 @@ public sealed class SidebarNavigation : MonoBehaviour
             paymentBooking.DepartureDate == datePage.Departure && paymentBooking.ReturnDate == datePage.Return &&
             TravelApp.TravelAppRuntime.Instance.CompletedFlights.Any(record => ReferenceEquals(record.Booking, paymentBooking)))
             return TravelApp.Result.Fail("This trip is already booked.");
+        var draft=CaptureDraft(step);
+        var result = TravelApp.TravelAppRuntime.Instance.Services.SaveDraft(draft);
+        if (result.success) {activeDraftId=draft.id;notifications?.Show("Trip saved",OpenSavedTrips);}
+        else notifications?.Show(result.message);
+        return result;
+    }
+
+    private TripDraft CaptureDraft(TripDraft.Step step)
+    {
         var draft = new TripDraft
         {
             id = activeDraftId ?? Guid.NewGuid().ToString("N"),
@@ -380,16 +470,14 @@ public sealed class SidebarNavigation : MonoBehaviour
             originText = originSearch.RawText, destinationText = destinationSearch.RawText,
             originAirportCode=originSearch.SelectedAirportCode, destinationAirportCode=destinationSearch.SelectedAirportCode,
             departureTicks = datePage.Departure?.Ticks ?? 0, returnTicks = datePage.Return?.Ticks ?? 0,
-            oneWay = datePage.IsOneWay, passengers = flightResults.PassengerCount, cabin = flightResults.CabinClass, step = step
+            oneWay = datePage.IsOneWay, passengers = flightResults.PassengerCount, passengerDetails=flightResults.Passengers.Clone(), passengerDetailsVersion=1, cabin = flightResults.CabinClass, step = step
         };
         bool sameRoute = draft.origin == bookingOrigin && draft.destination == bookingDestination;
         if (sameRoute && datePage.Departure == departureDate)
             draft.outbound = CaptureLeg(flightResults, CurrentSeatBooking, draft.origin, draft.destination, datePage.Departure);
         if (sameRoute && datePage.Return.HasValue && datePage.Return == returnDate)
             draft.inbound = CaptureLeg(returnResults, CurrentReturnSeatBooking, draft.destination, draft.origin, datePage.Return);
-        var result = TravelApp.TravelAppRuntime.Instance.Services.SaveDraft(draft);
-        if (result.success) activeDraftId = draft.id;
-        return result;
+        return draft;
     }
 
     private static TripDraft.Leg CaptureLeg(FlightResultsPage results, SeatSelectionPage.Booking booking,
@@ -397,7 +485,7 @@ public sealed class SidebarNavigation : MonoBehaviour
     {
         var leg = new TripDraft.Leg { airlineCode = results.SelectedDeparture?.Code, itineraryId = results.SelectedDeparture?.Id, farePerTraveler = results.SelectedFarePerTraveler };
         if (booking != null && booking.Flight == results.SelectedDeparture && booking.Origin == origin &&
-            booking.Destination == destination && booking.DepartureDate == date && booking.PassengerCount == results.PassengerCount && booking.Cabin == results.CabinClass)
+            booking.Destination == destination && booking.DepartureDate == date && booking.PassengerSignature == results.Passengers.PricingSignature && booking.Cabin == results.CabinClass)
         {
             leg.seats = booking.Seats.ToArray();
             leg.segments = booking.Flight.Segments.Select((segment,index)=>new TripDraft.Segment
@@ -411,17 +499,51 @@ public sealed class SidebarNavigation : MonoBehaviour
         return leg;
     }
 
+    public bool HasUnsavedBooking
+    {
+        get
+        {
+            var runtime=TravelApp.TravelAppRuntime.Instance;
+            if(runtime==null || flightResults==null)return false;
+            if(paymentBooking!=null && CurrentSeatBooking!=null && paymentBooking.Matches(CurrentSeatBooking,returnDate.HasValue?CurrentReturnSeatBooking:null) &&
+                paymentBooking.Origin==originSearch.SelectedDestination && paymentBooking.Destination==destinationSearch.SelectedDestination &&
+                paymentBooking.DepartureDate==datePage.Departure && paymentBooking.ReturnDate==datePage.Return && runtime.CompletedFlights.Any(r=>ReferenceEquals(r.Booking,paymentBooking)))return false;
+            var current=CaptureDraft(bookingStep);
+            bool meaningful=!string.IsNullOrWhiteSpace(current.destinationText) || !string.IsNullOrWhiteSpace(current.destination) ||
+                !string.IsNullOrWhiteSpace(current.originText) && current.originText!=DefaultOrigin || current.departureTicks>0 || current.returnTicks>0 || current.oneWay || current.passengers!=1 || current.cabin!="Economy";
+            if(!meaningful)return false;
+            var saved=runtime.Services.DraftTrips.FirstOrDefault(d=>d.id==activeDraftId);
+            if(saved==null)return true;
+            string Comparable(TripDraft draft)
+            {draft.passengerDetails=draft.PassengerDetails;draft.passengerDetailsVersion=1;draft.id=draft.username=draft.updatedUtc=draft.title=null;draft.step=TripDraft.Step.Search;return JsonUtility.ToJson(draft);}
+            return Comparable(current)!=Comparable(saved);
+        }
+    }
     public void StartNewTrip()
+    {
+        if(!HasUnsavedBooking){ResetBooking();return;}
+        dialog.Show("Start a new trip?","Save your current progress before replacing this plan.",
+            new[]{"Cancel","Save and start new trip","Discard and start new trip"},choice=>{
+                if(choice==0)return true;
+                if(choice==1)
+                {
+                    var result=SaveActiveDraft();
+                    if(!result.success){dialog.Error(result.message);return false;}
+                }
+                ResetBooking();return true;
+            });
+    }
+    private void ResetBooking()
     {
         activeDraftId = null;
         paymentBooking = null;
-        originSearch.RestoreSelection(DefaultOrigin, DefaultOrigin,"JFK");
+        originSearch.RestoreSelection(DefaultOrigin, DefaultOrigin,DefaultOriginCode);
         destinationSearch.RestoreSelection(null, "");
         datePage.RestoreDates(null, null, false);
         bookingOrigin = bookingDestination = null;
         departureDate = default; returnDate = null; travelDates = "";
-        flightResults.ShowTrip("", ""); flightResults.RestoreOptions(1, "Economy", null);
-        returnResults.ShowTrip("", ""); returnResults.RestoreOptions(1, "Economy", null);
+        flightResults.ShowTrip("", ""); flightResults.RestoreOptions(1, TravelApp.TravelAppRuntime.Instance.Services.Accounts.Preferences.cabinClass, null);
+        returnResults.ShowTrip("", ""); returnResults.RestoreOptions(1, TravelApp.TravelAppRuntime.Instance.Services.Accounts.Preferences.cabinClass, null);
         seatPage.ClearBooking(); returnSeats.ClearBooking();
         ShowPage(0);
     }
@@ -443,9 +565,10 @@ public sealed class SidebarNavigation : MonoBehaviour
         returnDate = datePage.Return;
         travelDates = draft.Departure.HasValue ? FormatDate(departureDate) + (returnDate.HasValue ? " – " + FormatDate(returnDate.Value) : " · One way") : "";
         flightResults.ShowTrip(OutboundRoute, travelDates, departureDate);
-        flightResults.RestoreOptions(draft.passengers, draft.cabin, draft.outbound?.airlineCode, draft.outbound?.itineraryId);
+        flightResults.RestoreOptions(draft.passengers, draft.cabin, draft.outbound?.airlineCode, draft.outbound?.itineraryId,draft.PassengerDetails);
         returnResults.ShowTrip(ReturnRoute, returnDate.HasValue ? FormatDate(returnDate.Value) : "", returnDate);
         returnResults.RestoreOptions(draft.passengers, draft.cabin, draft.inbound?.airlineCode, draft.inbound?.itineraryId);
+        returnResults.UsePassengers(flightResults.Passengers);
         seatPage.ClearBooking(); returnSeats.ClearBooking();
         if (HasValidRoute && draft.Departure.HasValue && flightResults.SelectedDeparture != null)
         {
@@ -476,6 +599,9 @@ public sealed class SidebarNavigation : MonoBehaviour
             case TripDraft.Step.Review: ShowTripReview(); break;
             default: ShowTripReview(); ContinueToPayment(); break;
         }
+        if(HasValidRoute && (!string.IsNullOrEmpty(draft.outbound?.itineraryId) && flightResults.SelectedDeparture==null ||
+            returnDate.HasValue && !string.IsNullOrEmpty(draft.inbound?.itineraryId) && returnResults.SelectedDeparture==null))
+            notifications?.Show("Saved flight options changed. Please select again.",seconds:6);
     }
 
     private static bool IsCompleteLeg(SeatSelectionPage.Booking leg, string origin, string destination,
@@ -485,7 +611,7 @@ public sealed class SidebarNavigation : MonoBehaviour
             !string.IsNullOrWhiteSpace(origin) && !string.IsNullOrWhiteSpace(destination) &&
             leg.Origin == origin && leg.Destination == destination &&
             leg.Flight != null && leg.Flight == results.SelectedDeparture &&
-            leg.PassengerCount >= 1 && leg.PassengerCount <= 6 && leg.PassengerCount == results.PassengerCount &&
+            leg.Passengers.IsValid && leg.PassengerSignature == results.Passengers.PricingSignature &&
             !string.IsNullOrWhiteSpace(leg.Cabin) && leg.Cabin == results.CabinClass &&
             leg.FarePerTraveler > 0 && leg.FarePerTraveler == results.SelectedFarePerTraveler &&
             leg.HasAllSeats;

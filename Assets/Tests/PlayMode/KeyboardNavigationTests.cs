@@ -51,6 +51,9 @@ public class KeyboardNavigationTests
         var traveler=Button(form.transform,"Search travelers");focus.Focus(traveler);yield return Press(Key.Space);
         yield return Press(Key.Tab);Selected(Button(form.transform,"More travelers"));
         yield return Press(Key.Space);Assert.AreEqual(2,Field<FlightResultsPage>(nav,"flightResults").PassengerCount);
+        yield return Press(Key.Tab);Selected(Button(form.transform,"More Child"));
+        yield return Press(Key.Tab);Selected(Button(form.transform,"More InfantInSeat"));
+        yield return Press(Key.Tab);Selected(Button(form.transform,"More InfantOnLap"));
         yield return Press(Key.Tab);Selected(Button(form.transform,"Done travelers"));yield return Press(Key.Space);Selected(traveler);
         yield return Press(Key.Tab);Selected(Button(form.transform,"Search cabin"));
         var dates=Field<DateSelectionPage>(nav,"datePage");

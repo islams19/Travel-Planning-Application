@@ -50,7 +50,7 @@ public class ConnectingFlightTests
         var page=Field<FlightResultsPage>(nav,"flightResults");
         var all=Field<List<FlightResultsPage.Flight>>(page,"flights");
         Assert.That(all.Count,Is.InRange(10,15)); Assert.AreEqual(all.Count,all.Select(f=>f.Id).Distinct().Count());
-        Assert.IsTrue(all.GroupBy(f=>f.Code).All(g=>g.Count()>1));
+        Assert.IsTrue(all.GroupBy(f=>f.Code).Any(g=>g.Count()>1));
         Assert.IsTrue(all.Any(f=>f.Stops==0)); Assert.IsTrue(all.Any(f=>f.Stops==1)); Assert.IsTrue(all.Any(f=>f.Stops==2));
         Assert.IsTrue(all.Any(f=>f.Stops>0 && f.Price<all.Where(n=>n.Stops==0).Max(n=>n.Price)));
         foreach(var flight in all)
@@ -69,21 +69,21 @@ public class ConnectingFlightTests
         Button(page.transform,"Filters").onClick.Invoke();
         foreach(int maxStops in new[]{0,1,2})
         {
-            Button(page.transform,"Stops").onClick.Invoke();
+            Button(page.transform,new[]{"Stops Nonstop","Stops 1 stop or fewer","Stops 2 stops or fewer"}[maxStops]).onClick.Invoke();
             CollectionAssert.AreEquivalent(all.Where(f=>f.Stops<=maxStops),Visible(page));
         }
-        Button(page.transform,"Stops").onClick.Invoke(); Button(page.transform,"Done").onClick.Invoke();
-        Set(page,"airlineFilter",2); Refresh(page); Assert.IsTrue(Visible(page).All(f=>f.Code=="DL")); Assert.Greater(Visible(page).Count,1);
-        Set(page,"airlineFilter",0);
+        Button(page.transform,"Stops Any").onClick.Invoke(); Button(page.transform,"Done").onClick.Invoke();
+        string repeated=all.GroupBy(f=>f.Code).First(g=>g.Count()>1).Key;Field<HashSet<string>>(page,"selectedAirlines").Add(repeated); Refresh(page); Assert.IsTrue(Visible(page).All(f=>f.Code==repeated)); Assert.Greater(Visible(page).Count,1);
+        Field<HashSet<string>>(page,"selectedAirlines").Clear();
         for(int t=1;t<=3;t++)
         {
             Set(page,"timeFilter",t); Refresh(page);
-            CollectionAssert.AreEquivalent(all.Where(f=>{int h=f.Segments[0].DepartureLocal.Hour; return t==1?h<12:t==2?h>=12&&h<18:h>=18;}),Visible(page));
+            CollectionAssert.AreEquivalent(all.Where(f=>{int h=f.Segments[0].DepartureLocal.Hour; return t==1?h>=6&&h<12:t==2?h>=12&&h<18:h>=18;}),Visible(page));
         }
-        Set(page,"timeFilter",0); Set(page,"cabin",2); Set(page,"passengers",3); Set(page,"maximumPrice",500); Refresh(page);
+        Set(page,"timeFilter",0); Set(page,"cabin",2); Invoke(page,"SetBookingOptions",3,page.CabinClass); Set(page,"maximumPrice",500); Refresh(page);
         CollectionAssert.AreEquivalent(all.Where(f=>Mathf.RoundToInt(f.Price*2.2f)<=500),Visible(page));
-        Set(page,"maximumPrice",2000);
-        Set(page,"durationFilter",2); Refresh(page); CollectionAssert.AreEquivalent(all.Where(f=>f.DurationMinutes<=540),Visible(page));
+        Set(page,"maximumPrice",int.MaxValue);
+        Set(page,"durationFilter",540); Refresh(page); CollectionAssert.AreEquivalent(all.Where(f=>f.DurationMinutes<=540),Visible(page));
         Assert.IsTrue(page.GetComponentsInChildren<TMP_Text>().Any(t=>t.text=="No flights match these filters."));
         Set(page,"durationFilter",0);
         for(int order=0;order<3;order++)
@@ -98,7 +98,7 @@ public class ConnectingFlightTests
         float summaryY=page.transform.Find("Trip summary").position.y;
         scroll.verticalNormalizedPosition=0; yield return null;
         Assert.Greater(scroll.content.anchoredPosition.y,100); Assert.AreEqual(summaryY,page.transform.Find("Trip summary").position.y);
-        var connecting=all.First(f=>f.Id=="AA-106");
+        var connecting=all.First(f=>MockFlightTestData.Matches(f,"AA-106"));
         Button(Card(connecting),"Flight details").onClick.Invoke();
         var detailRoot=Field<RectTransform>(page,"detailsContent");
         string detailCopy=string.Join("\n",detailRoot.GetComponentsInChildren<TMP_Text>().Select(t=>t.text));
@@ -128,7 +128,7 @@ public class ConnectingFlightTests
         var saved=TravelApp.TravelAppRuntime.Instance.Services.DraftTrips.Last(); Assert.AreEqual(connecting.Id,saved.outbound.itineraryId);
         nav.ResumeDraft(saved); Assert.AreEqual(connecting.Id,page.SelectedDeparture.Id);
         Assert.AreEqual(connecting.Baggage.Summary,page.SelectedDeparture.Baggage.Summary);
-        Invoke(nav,"ContinueToPayment");
+        PassengerTestData.Complete(nav);Invoke(nav,"ContinueToPayment");
         var snapshot=Field<PaymentBooking>(nav,"paymentBooking"); Assert.IsNotNull(snapshot);
         Assert.AreEqual(connecting.Id,snapshot.Outbound.ItineraryId); Assert.AreEqual(2,snapshot.Outbound.Segments.Count);
         Assert.AreEqual(connecting.Layovers[0].AirportCode,snapshot.Outbound.Layovers[0].AirportCode);

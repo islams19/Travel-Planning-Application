@@ -39,13 +39,18 @@ public class TwoMonthCalendarTests
     static DateTime? Departure(DateSelectionPage page)=>Field<DateTime?>(page,"departureDate");
     static DateTime? Return(DateSelectionPage page)=>Field<DateTime?>(page,"returnDate");
     AppServices original; TravelCatalog catalog;
+    static readonly System.Reflection.FieldInfo CalendarToday=typeof(DateSelectionPage).GetField("Today",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
+    static void PinToday(DateTime day)=>CalendarToday.SetValue(null,(Func<DateTime>)(()=>day));
     [TearDown] public void Cleanup()
     {
+        CalendarToday.SetValue(null,(Func<DateTime>)(()=>DateTime.Today));
         if(original!=null) typeof(TravelAppRuntime).GetProperty("Services").SetValue(TravelAppRuntime.Instance,original);
         if(catalog!=null) Object.DestroyImmediate(catalog);
     }
     [UnityTest,Timeout(45000)] public IEnumerator TwoMonthsPricesCrossMonthRangeNavigationEditingAndDraftsUseSharedState()
     {
+        // Pin "today" to the start of a month so the test's relative dates are never in the past.
+        PinToday(new DateTime(2026,11,1));
         yield return SceneManager.LoadSceneAsync("DesktopLayout"); yield return null; yield return null;
         var runtime=TravelAppRuntime.Instance; original=runtime.Services; catalog=ScriptableObject.CreateInstance<TravelCatalog>();
         typeof(TravelAppRuntime).GetProperty("Services").SetValue(runtime,new AppServices(catalog,new MemoryStore()));
@@ -105,8 +110,47 @@ public class TwoMonthCalendarTests
         yield return Click(Day(dates,new DateTime(2026,12,26))); Assert.IsNull(Return(dates)); Assert.IsTrue(Button(dates.transform,"Confirm Dates").interactable);
         yield return Click(dates.transform,"Confirm Dates"); yield return Click(search.transform,"Search Flights");
         Assert.IsTrue(results.gameObject.activeInHierarchy); Assert.IsNull(Field<DateTime?>(nav,"returnDate"));
-        CollectionAssert.AreEqual(baseFares,Field<List<FlightResultsPage.Flight>>(results,"flights").Select(f=>f.Price));
+        CollectionAssert.AreEqual(MockFlightGenerator.Generate(TravelApp.FlightMap.TravelLocationCatalog.Find("JFK"),TravelApp.FlightMap.TravelLocationCatalog.Find("HND"),Departure(dates).Value).Select(f=>f.Price),Field<List<FlightResultsPage.Flight>>(results,"flights").Select(f=>f.Price));
         Assert.AreEqual(1,Object.FindObjectsByType<DateSelectionPage>(FindObjectsInactive.Include,FindObjectsSortMode.None).Length);
         runtime.Services.RemoveDraft(draft.id);
+    }
+    [UnityTest,Timeout(30000)] public IEnumerator PastDatesAreGreyedOutAndCannotBeChosen()
+    {
+        PinToday(new DateTime(2026,11,26));
+        yield return SceneManager.LoadSceneAsync("DesktopLayout"); yield return null; yield return null;
+        var runtime=TravelAppRuntime.Instance; original=runtime.Services; catalog=ScriptableObject.CreateInstance<TravelCatalog>();
+        typeof(TravelAppRuntime).GetProperty("Services").SetValue(runtime,new AppServices(catalog,new MemoryStore()));
+        var nav=Object.FindFirstObjectByType<SidebarNavigation>(); var search=Field<GameObject[]>(nav,"pages")[0];
+        var dates=Field<DateSelectionPage>(nav,"datePage");
+        yield return Click(search.transform,"card-Tokyo"); yield return Click(search.transform,"Departure date");
+        Assert.AreEqual(new DateTime(2026,11,1),Field<DateTime>(dates,"displayedMonth"));
+        Assert.IsFalse(Button(dates.transform,"Previous month").interactable,"The calendar must not page back before the current month");
+        var yesterday=new DateTime(2026,11,25);
+        Assert.IsFalse(Day(dates,yesterday).interactable); Assert.AreEqual("",Price(dates,yesterday));
+        Day(dates,yesterday).onClick.Invoke(); Assert.IsNull(Departure(dates));
+        Assert.IsTrue(Day(dates,new DateTime(2026,11,26)).interactable,"Today stays bookable");
+        yield return Click(Day(dates,new DateTime(2026,11,26))); Assert.AreEqual(new DateTime(2026,11,26),Departure(dates));
+        yield return Click(dates.transform,"Next month"); Assert.IsTrue(Button(dates.transform,"Previous month").interactable);
+        // A restored trip whose dates have passed asks for new dates instead of searching.
+        Invoke(dates,"RestoreDates",(DateTime?)new DateTime(2026,11,8),(DateTime?)new DateTime(2026,11,15),false);
+        Field<CompactFlightSearch>(nav,"compactSearch").CloseCalendar();
+        yield return Click(search.transform,"Search Flights");
+        Assert.IsFalse(Field<FlightResultsPage>(nav,"flightResults").gameObject.activeInHierarchy);
+        Assert.IsTrue(Field<CompactFlightSearch>(nav,"compactSearch").IsCalendarOpen);
+        StringAssert.Contains("passed",Field<TMP_Text>(Field<CompactFlightSearch>(nav,"compactSearch"),"message").text);
+    }
+    [UnityTest,Timeout(30000)] public IEnumerator DateValidationMessageClearsOnceDatesAreChosen()
+    {
+        PinToday(new DateTime(2026,11,1));
+        yield return SceneManager.LoadSceneAsync("DesktopLayout"); yield return null; yield return null;
+        var runtime=TravelAppRuntime.Instance; original=runtime.Services; catalog=ScriptableObject.CreateInstance<TravelCatalog>();
+        typeof(TravelAppRuntime).GetProperty("Services").SetValue(runtime,new AppServices(catalog,new MemoryStore()));
+        var nav=Object.FindFirstObjectByType<SidebarNavigation>(); var search=Field<GameObject[]>(nav,"pages")[0];
+        var dates=Field<DateSelectionPage>(nav,"datePage"); var compact=Field<CompactFlightSearch>(nav,"compactSearch");
+        yield return Click(search.transform,"card-Tokyo"); yield return Click(search.transform,"Search Flights");
+        Assert.AreEqual("Choose the required travel dates.",Field<TMP_Text>(compact,"message").text);
+        yield return Click(Day(dates,new DateTime(2026,12,10))); yield return Click(Day(dates,new DateTime(2026,12,20)));
+        yield return Click(dates.transform,"Confirm Dates");
+        Assert.AreEqual("",Field<TMP_Text>(compact,"message").text,"A fixed date error must not linger");
     }
 }

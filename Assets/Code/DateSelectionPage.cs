@@ -40,6 +40,11 @@ public sealed class DateSelectionPage : MonoBehaviour
     private readonly DateTime?[] cellDates = new DateTime?[84];
     private readonly int?[] estimatedFares = new int?[84];
     private static readonly Color LowerFare = new Color32(22,128,87,255);
+    private static readonly Color DisabledDay = new Color32(186,193,206,255);
+    // The calendar's notion of "today". Tests can pin it; the app uses the device clock.
+    internal static Func<DateTime> Today = () => DateTime.Today;
+    private UnityEngine.UI.Button previousMonth;
+    private static DateTime CurrentMonth { get { var today=Today(); return new DateTime(today.Year,today.Month,1); } }
 
     public void Build()
     {
@@ -54,7 +59,8 @@ public sealed class DateSelectionPage : MonoBehaviour
         destinationLabel.overflowMode=TextOverflowModes.Ellipsis;
         monthLabel=Text("Month",calendar,84,72,540,46,"",25,Ink,true);
         secondMonthLabel=Text("Following month",calendar,792,72,540,46,"",25,Ink,true);
-        Control("Previous month",calendar,28,72,46,46,"<",Background,Muted,26).onClick.AddListener(()=>ChangeMonth(-1));
+        previousMonth=Control("Previous month",calendar,28,72,46,46,"<",Background,Muted,26);
+        previousMonth.onClick.AddListener(()=>ChangeMonth(-1));
         Control("Next month",calendar,1340,72,46,46,">",Background,Muted,26).onClick.AddListener(()=>ChangeMonth(1));
         var divider=Shape("Month divider",calendar,706,76,1,508,Border);
         divider.GetComponent<Image>().sprite=null;
@@ -91,8 +97,7 @@ public sealed class DateSelectionPage : MonoBehaviour
         DropdownChevron.Attach(tripType);
         tripType.onClick.AddListener(()=>SetOneWay(!oneWay));
 
-        DateTime today = DateTime.Today;
-        displayedMonth = new DateTime(today.Year, today.Month, 1);
+        displayedMonth = CurrentMonth;
         RefreshCalendar();
         RefreshSelectedDates();
     }
@@ -104,13 +109,15 @@ public sealed class DateSelectionPage : MonoBehaviour
     {
         int serial=(displayedMonth.Year-1)*12+displayedMonth.Month-1;
         serial=Mathf.Clamp(serial+amount,0,9999*12-2);
-        displayedMonth=new DateTime(serial/12+1,serial%12+1,1);
+        var month=new DateTime(serial/12+1,serial%12+1,1);
+        displayedMonth=month<CurrentMonth ? CurrentMonth : month;
         RefreshCalendar();
     }
 
     private void SelectDate(DateTime date)
     {
         date=date.Date;
+        if(date<Today().Date) return;
         if(ChoosingReturn)
         {
             if(date<=departureDate.Value) return;
@@ -132,6 +139,10 @@ public sealed class DateSelectionPage : MonoBehaviour
         monthLabel.text=displayedMonth.ToString("MMMM yyyy",CultureInfo.InvariantCulture);
         secondMonthLabel.text=displayedMonth.AddMonths(1).ToString("MMMM yyyy",CultureInfo.InvariantCulture);
         selectionHint.text=ChoosingReturn ? "Choose return date" : "Choose departure date";
+        DateTime today=Today().Date;
+        bool canGoBack=displayedMonth>CurrentMonth;
+        previousMonth.interactable=canGoBack;
+        previousMonth.GetComponentInChildren<TMP_Text>().color=canGoBack ? Muted : DisabledDay;
         for(int i=0;i<84;i++)
         {
             DateTime month=displayedMonth.AddMonths(i/42);
@@ -142,10 +153,10 @@ public sealed class DateSelectionPage : MonoBehaviour
             dayButtons[i].gameObject.SetActive(visible);
         }
         var prices=estimatedFares.Where((price,index)=>price.HasValue && cellDates[index].HasValue &&
-            (!ChoosingReturn || cellDates[index]>departureDate)).Select(price=>price.Value).OrderBy(price=>price).ToArray();
+            cellDates[index]>=today && (!ChoosingReturn || cellDates[index]>departureDate)).Select(price=>price.Value).OrderBy(price=>price).ToArray();
         int threshold=prices.Length>0 ? prices[(prices.Length-1)/4] : 0;
         bool hasPrices=estimatedFares.Any(price=>price.HasValue);
-        fareNote.text=hasPrices ? "Estimated one-way fares per traveler · USD. Not live or guaranteed; flight-result prices may differ." :
+        fareNote.text=hasPrices ? "Preliminary one-way estimates per adult · USD. Not live or guaranteed; flight-result prices may differ." :
             "Choose From and To to see estimated date fares.";
         cheaperLegend.SetActive(hasPrices);
         for(int i=0;i<84;i++)
@@ -154,13 +165,13 @@ public sealed class DateSelectionPage : MonoBehaviour
             DateTime date=cellDates[i].Value;
             bool endpoint=date==departureDate || date==returnDate;
             bool inRange=departureDate.HasValue && returnDate.HasValue && date>departureDate && date<returnDate;
-            bool selectable=!ChoosingReturn || date>departureDate;
+            bool selectable=date>=today && (!ChoosingReturn || date>departureDate);
             dayButtons[i].interactable=selectable;
             dayButtons[i].targetGraphic.color=endpoint ? Blue : inRange ? PaleBlue : Color.white;
             dayLabels[i].text=date.Day.ToString(CultureInfo.InvariantCulture);
-            dayLabels[i].color=endpoint ? Color.white : inRange ? Blue : selectable ? Ink : new Color32(186,193,206,255);
+            dayLabels[i].color=endpoint ? Color.white : inRange ? Blue : selectable ? Ink : DisabledDay;
             fareLabels[i].text=estimatedFares[i].HasValue && (selectable || endpoint) ? $"${estimatedFares[i].Value:N0}" : "";
-            bool cheaper=estimatedFares[i].HasValue && estimatedFares[i]<=threshold;
+            bool cheaper=selectable && estimatedFares[i].HasValue && estimatedFares[i]<=threshold;
             fareLabels[i].color=endpoint ? Color.white : inRange ? Blue : cheaper ? LowerFare : Muted;
             fareLabels[i].fontStyle=cheaper ? FontStyles.Bold : FontStyles.Normal;
         }
@@ -200,8 +211,9 @@ public sealed class DateSelectionPage : MonoBehaviour
         departureDate = departure;
         oneWay = isOneWay;
         returnDate = !isOneWay && departure.HasValue && returning>departure ? returning : null;
-        var month = departure ?? DateTime.Today;
+        var month = departure ?? Today();
         displayedMonth = new DateTime(month.Year, month.Month, 1);
+        if (displayedMonth < CurrentMonth) displayedMonth = CurrentMonth;
         transform.Find("Trip summary/Surface/Trip type").GetComponentInChildren<TMP_Text>().text = oneWay ? "One way" : "Round trip";
         RefreshCalendar();
         RefreshSelectedDates();
@@ -212,8 +224,9 @@ public sealed class DateSelectionPage : MonoBehaviour
     {
         editingReturn=returnField && departureDate.HasValue && !oneWay;
         editingDeparture=!returnField;
-        var date=departureDate ?? DateTime.Today;
+        var date=departureDate ?? Today();
         var first=new DateTime(date.Year,date.Month,1);
+        if(first<CurrentMonth) first=CurrentMonth;
         if(returnField && returnDate.HasValue && returnDate.Value>=first.AddMonths(2))
             first=new DateTime(returnDate.Value.Year,returnDate.Value.Month,1).AddMonths(-1);
         displayedMonth=first;

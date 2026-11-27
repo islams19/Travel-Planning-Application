@@ -59,10 +59,14 @@ public class FlightResultsPresentationTests
             Assert.AreEqual(scroll.viewport.rect.width,card.rect.width,2);
             Assert.AreEqual(0,card.anchoredPosition.x,.1f);
             if(i>0) Assert.Greater(Card(ordered[i-1]).anchoredPosition.y-card.anchoredPosition.y,card.rect.height);
-            var logo=card.Find("Airline badge/Airline logo").GetComponent<RawImage>(); Assert.IsNotNull(logo.texture);
-            Assert.AreSame(AirlineLogo.Load(flight.Code),logo.texture);
-            Assert.AreEqual((float)logo.texture.width/logo.texture.height,logo.rectTransform.rect.width/logo.rectTransform.rect.height,.01f);
-            Assert.LessOrEqual(logo.rectTransform.rect.width,logo.texture.width);Assert.LessOrEqual(logo.rectTransform.rect.height,logo.texture.height);
+            var texture=AirlineLogo.Load(flight.Code);
+            if(texture!=null)
+            {
+                var logo=card.Find("Airline badge/Airline logo").GetComponent<RawImage>();Assert.AreSame(texture,logo.texture);
+                Assert.AreEqual((float)logo.texture.width/logo.texture.height,logo.rectTransform.rect.width/logo.rectTransform.rect.height,.01f);
+                Assert.LessOrEqual(logo.rectTransform.rect.width,logo.texture.width);Assert.LessOrEqual(logo.rectTransform.rect.height,logo.texture.height);
+            }
+            else Assert.AreEqual(flight.Code,card.Find("Airline badge").GetComponentInChildren<TMP_Text>().text);
             StringAssert.Contains(flight.Baggage.CheckedBagLabel,card.GetComponentsInChildren<TMP_Text>().Single(t=>t.name=="Checked baggage").text);
             StringAssert.Contains("3 travelers",card.GetComponentsInChildren<TMP_Text>().Single(t=>t.name=="Traveler total").text);
         }

@@ -139,7 +139,7 @@ namespace TravelApp.FlightMap
                 if (offer.Destination == destination || offer.Destination.code == destination?.code) { selected = offer; break; }
             selectedPriceText.text = selected == null
                 ? "Choose different valid airports to see fares"
-                : $"{selected.PriceLabel} {selected.Currency} · {selected.Destination.code} — {selected.Destination.city}";
+                : $"Est. {selected.PriceLabel} {selected.Currency} · Economy · {selected.Destination.code}";
         }
     }
 }

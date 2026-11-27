@@ -33,6 +33,7 @@ namespace TravelApp
             if (Data.draftTrips.Any(d => d.id == draft.id && !OwnsDraft(d)))
                 return Result.Fail("This draft belongs to another account.");
             var snapshot = JsonUtility.FromJson<TripDraft>(JsonUtility.ToJson(draft));
+            if(string.IsNullOrWhiteSpace(snapshot.title)) snapshot.title=Data.draftTrips.FirstOrDefault(d=>d.id==snapshot.id && OwnsDraft(d))?.title;
             snapshot.username = Accounts.Username;
             snapshot.updatedUtc = DateTime.UtcNow.ToString("O");
             return Commit(() =>
@@ -40,6 +41,15 @@ namespace TravelApp
                 Data.draftTrips.RemoveAll(d => d.id == snapshot.id && OwnsDraft(d));
                 Data.draftTrips.Add(snapshot);
             }, "Trip saved for later.");
+        }
+
+        public Result RenameDraft(string id,string title)
+        {
+            var draft=DraftTrips.FirstOrDefault(d=>d.id==id);
+            if(draft==null)return Result.Fail("Saved trip not found.");
+            title=(title??"").Trim();
+            if(title.Length<1 || title.Length>60 || title.Any(char.IsControl))return Result.Fail("Use 1–60 characters for the trip name.");
+            draft.title=title;return SaveDraft(draft);
         }
 
         public Result RemoveDraft(string id) => Commit(() =>

@@ -14,6 +14,8 @@ using UIButton = UnityEngine.UI.Button;
 
 public class DesktopBookingFlowTests
 {
+    [SetUp] public void PinCalendar()=>CalendarClock.PinToStartOfMonth();
+    [TearDown] public void ResetCalendar()=>CalendarClock.Reset();
     sealed class MemoryStore : ISaveStore
     {
         public SaveData Load() => new SaveData();
@@ -89,6 +91,9 @@ public class DesktopBookingFlowTests
         foreach (int i in new[] { 1, 2, 3, 0 })
         {
             buttons[i].onClick.Invoke();
+            // Leaving a booking page asks first; choosing to leave keeps the in-memory booking.
+            var leave = Object.FindFirstObjectByType<AppDialog>();
+            if (leave != null && leave.IsOpen) FindButton(leave.transform, "Leave without saving").onClick.Invoke();
             Assert.AreSame(outbound, nav.CurrentSeatBooking);
             Assert.AreSame(inbound, nav.CurrentReturnSeatBooking);
             Assert.IsTrue(services.Accounts.IsLoggedIn);
@@ -97,7 +102,7 @@ public class DesktopBookingFlowTests
         Check("Flight Results");
         if (resume == "search") return;
         var results = Field<FlightResultsPage>(nav, "flightResults");
-        Click(results.transform.Find("Flight results scroll/Viewport/Flight cards/JetBlue"), "Select");
+        Click(MockFlightTestData.Card(results,0), "Select");
         Check("Seat Selection");
         Assert.AreSame(outbound, nav.CurrentSeatBooking, "Unchanged search must retain departure seats");
         Click(Field<SeatSelectionPage>(nav,"seatPage").transform, "Confirm Seat");
@@ -105,7 +110,7 @@ public class DesktopBookingFlowTests
         {
             var returns = Field<FlightResultsPage>(nav,"returnResults");
             Assert.IsNotNull(returns.SelectedDeparture, "Return selection survives unchanged departure confirmation");
-            Click(returns.transform.Find("Flight results scroll/Viewport/Flight cards/Delta Air Lines"), "Select");
+            Click(MockFlightTestData.Card(returns,1), "Select");
             Assert.AreSame(inbound, nav.CurrentReturnSeatBooking);
             Click(Field<SeatSelectionPage>(nav,"returnSeats").transform, "Confirm Seat");
         }
@@ -130,11 +135,11 @@ public class DesktopBookingFlowTests
         Check("Flight Results");
         var flights = Field<FlightResultsPage>(nav,"flightResults");
         Click(flights.transform,"Modify Search");
-        Click(flights.transform,"Passengers"); // Two travelers, one shared cabin.
+        PassengerTestData.AddAdult(flights); // Two travelers, one shared cabin.
         Click(flights.transform,"Cabin"); Click(flights.transform,"Cabin");
         Click(flights.transform,"Done");
         Assert.AreEqual(2,flights.PassengerCount); Assert.AreEqual("Business",flights.CabinClass);
-        Click(flights.transform.Find("Flight results scroll/Viewport/Flight cards/JetBlue"),"Select");
+        Click(MockFlightTestData.Card(flights,0),"Select");
         Check("Seat Selection");
         var outbound = nav.CurrentSeatBooking;
         Assert.AreEqual("Tokyo, Japan",outbound.Destination);
@@ -150,7 +155,7 @@ public class DesktopBookingFlowTests
             Check("Return Flight Results");
             var returns = Field<FlightResultsPage>(nav,"returnResults");
             Assert.AreEqual(2,returns.PassengerCount);Assert.AreEqual("Business",returns.CabinClass);
-            Click(returns.transform.Find("Flight results scroll/Viewport/Flight cards/Delta Air Lines"),"Select");
+            Click(MockFlightTestData.Card(returns,1),"Select");
             Check("Return Seat Selection");
             var inbound = nav.CurrentReturnSeatBooking;
             Assert.AreEqual(outbound.Destination,inbound.Origin);Assert.AreEqual(outbound.Origin,inbound.Destination);
@@ -181,11 +186,11 @@ public class DesktopBookingFlowTests
         Click(dates.transform,"Confirm Dates");
         Click(GameObject.Find("searchflights_page").transform,"Search Flights");
         Assert.AreSame(outbound,nav.CurrentSeatBooking);
-        Click(flights.transform.Find("Flight results scroll/Viewport/Flight cards/JetBlue"),"Select");
+        Click(MockFlightTestData.Card(flights,0),"Select");
         Click(seats.transform,"Confirm Seat");
         if(roundTrip)
         {
-            Click(Field<FlightResultsPage>(nav,"returnResults").transform.Find("Flight results scroll/Viewport/Flight cards/Delta Air Lines"),"Select");
+            Click(MockFlightTestData.Card(Field<FlightResultsPage>(nav,"returnResults"),1),"Select");
             Click(Field<SeatSelectionPage>(nav,"returnSeats").transform,"Confirm Seat");
         }
         Click(Field<TripReviewPage>(nav,"tripReview").transform,"Save for Later");
@@ -214,7 +219,7 @@ public class DesktopBookingFlowTests
         Assert.AreEqual(departure,outbound.DepartureDate);Assert.AreEqual(returning,outbound.ReturnDate);
         CollectionAssert.AreEqual(new[]{"1A","1B"},outbound.Seats);
         if(roundTrip)CollectionAssert.AreEqual(new[]{"2A","2C"},nav.CurrentReturnSeatBooking.Seats);
-        Click(Field<TripReviewPage>(nav,"tripReview").transform,"Continue to Payment");
+        PassengerTestData.Complete(nav);Click(Field<TripReviewPage>(nav,"tripReview").transform,"Continue to Payment");
         Check("Payment");
         var payment=Page<PaymentPlaceholderPage>(); var snapshot=payment.Booking;
         Assert.AreEqual(testUsername,snapshot.Username);
@@ -222,7 +227,7 @@ public class DesktopBookingFlowTests
         CollectionAssert.AreEqual(outbound.Seats,snapshot.Outbound.Seats);
         Assert.AreEqual(roundTrip,snapshot.Return!=null);
         Click(payment.transform,"Back to Trip Review");
-        Click(Field<TripReviewPage>(nav,"tripReview").transform,"Continue to Payment");
+        PassengerTestData.Complete(nav);Click(Field<TripReviewPage>(nav,"tripReview").transform,"Continue to Payment");
         Assert.AreSame(snapshot,payment.Booking,"Unchanged payment must reuse the handoff");
         Click(payment.transform,"Submit mock payment");
         Assert.IsTrue(payment.gameObject.activeInHierarchy,"Invalid empty payment must not navigate");
@@ -265,7 +270,7 @@ public class DesktopBookingFlowTests
         StringAssert.Contains("Seats: 1A, 1B",details);
         if(roundTrip)StringAssert.Contains("Seats: 2A, 2C",details);
         SidebarRoundTrip("review");
-        Click(Field<TripReviewPage>(nav,"tripReview").transform,"Continue to Payment");
+        PassengerTestData.Complete(nav);Click(Field<TripReviewPage>(nav,"tripReview").transform,"Continue to Payment");
         Assert.IsFalse(FindButton(payment.transform,"Submit mock payment").interactable,"Paid booking cannot be charged again");
         Assert.AreEqual(1,runtime.CompletedFlights.Count);
         // Receipts survive recreation of the desktop Canvas, and remain scoped to their signed-in owner.
@@ -299,7 +304,7 @@ public class DesktopBookingFlowTests
         Assert.IsFalse(FindButton(dates.transform,"Confirm Dates").interactable);
         days=Field<UIButton[]>(dates,"dayButtons").Where(b=>b.gameObject.activeSelf).ToArray();days[14].onClick.Invoke();Click(dates.transform,"Confirm Dates");
         Click(GameObject.Find("searchflights_page").transform,"Search Flights");
-        var flights=Field<FlightResultsPage>(nav,"flightResults");Click(flights.transform,"Modify Search");Click(flights.transform,"Passengers");
+        var flights=Field<FlightResultsPage>(nav,"flightResults");Click(flights.transform,"Modify Search");PassengerTestData.AddAdult(flights);
         Click(flights.transform,"Cabin");Click(flights.transform,"Done");Click(flights.transform,"Save for Later");
         nav.OpenSavedTrips();Click(Page<SavedTripsPage>().transform,"Resume draft");Check("Flight Results");
         Assert.AreEqual(2,flights.PassengerCount);Assert.AreEqual("Premium Economy",flights.CabinClass);Assert.IsNull(flights.SelectedDeparture);
@@ -308,6 +313,7 @@ public class DesktopBookingFlowTests
         Assert.AreEqual(1,services.DraftTrips.Count);Assert.AreEqual(0,TravelAppRuntime.Instance.CompletedFlights.Count);
         string firstDraftId=services.DraftTrips[0].id;
         nav.OpenSavedTrips();Click(Page<SavedTripsPage>().transform,"Plan another trip");
+        Click(Page<AppDialog>().transform,"Discard and start new trip");
         Assert.AreEqual(1,services.DraftTrips.Count,"Starting a new plan keeps previously saved drafts");
         Click(GameObject.Find("searchflights_page").transform,"Save for Later");
         Assert.AreEqual(2,services.DraftTrips.Count,"A deliberately new plan receives its own draft ID");
@@ -325,8 +331,8 @@ public class DesktopBookingFlowTests
         days[9].onClick.Invoke();days[14].onClick.Invoke();Click(dates.transform,"Confirm Dates");
         Click(GameObject.Find("searchflights_page").transform,"Search Flights");
         var flights=Field<FlightResultsPage>(nav,"flightResults");
-        Click(flights.transform,"Modify Search");Click(flights.transform,"Passengers");Click(flights.transform,"Done");
-        Click(flights.transform.Find("Flight results scroll/Viewport/Flight cards/JetBlue"),"Select");
+        Click(flights.transform,"Modify Search");PassengerTestData.AddAdult(flights);Click(flights.transform,"Done");
+        Click(MockFlightTestData.Card(flights,0),"Select");
         var seats=Field<SeatSelectionPage>(nav,"seatPage");
         Click(seats.transform,"Seat 1A");Click(seats.transform,"Save for Later");
         Assert.AreEqual(1,services.DraftTrips.Count);
@@ -349,12 +355,12 @@ public class DesktopBookingFlowTests
         GameObject.Find("header_avatar").GetComponent<UIButton>().onClick.Invoke();
         var overlay = canvas.Find("Shared profile overlay");
         Click(overlay,"Profile");
-        Assert.IsTrue(overlay.GetComponentsInChildren<Transform>(true).First(t=>t.name=="Profile details").gameObject.activeInHierarchy);
-        Click(overlay,"Back to profile menu");
-        Click(overlay,"Settings");
         Assert.IsFalse(profile.IsOpen);
         Assert.IsTrue(Field<GameObject[]>(nav,"pages")[3].activeSelf);
-        profile.Toggle();Click(overlay,"Saved Trips");
+        Assert.IsNotNull(Page<ProfilePage>());
+        Assert.IsFalse(Field<UIButton[]>(nav,"buttons")[3].gameObject.activeSelf);
+        Assert.IsFalse(overlay.GetComponentsInChildren<UIButton>(true).Any(button=>button.name=="Settings"||button.name=="Saved Trips"));
+        nav.OpenSavedTrips();
         Assert.IsTrue(Field<GameObject[]>(nav,"pages")[2].activeInHierarchy);
         profile.Toggle();Click(overlay,"Dismiss profile menu");Assert.IsFalse(profile.IsOpen);
         profile.Toggle();Click(overlay,"Sign Out");

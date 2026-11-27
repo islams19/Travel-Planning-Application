@@ -6,3 +6,11 @@ DL: https://news.delta.com/sites/default/files/styles/article_width_full_no_jpg/
 B6: https://cms.jetblue.com/dam/ui-assets/imagery/logos/updated/JetBlue-logo.svg
 Downloaded 2026-11-22. ICO/SVG assets rasterized to PNG locally; aspect ratio preserved.
 No runtime network loading. Baggage data is synthetic, not airline policy.
+
+Additional bundled official identity icons (downloaded 2026-11-25):
+QF: https://www.qantas.com/favicon.ico
+NH: https://www.ana.co.jp/favicon.ico
+AC: https://www.aircanada.com/favicon.ico
+SQ: https://www.singaporeair.com/favicon.ico
+LH: https://www.lufthansa.com/favicon.ico
+Largest available ICO image converted locally. Other carriers use the existing clean code-badge fallback.

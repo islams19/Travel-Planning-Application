@@ -26,7 +26,12 @@ public sealed class FlightResultsPage : MonoBehaviour
     private DropdownChevron openChevron;
     private string travelDates;
     private DateTime routeTravelDate = new DateTime(2027,1,15);
-    private int passengers = 1;
+    private TMP_Text legTitle;
+    private bool returnLeg;
+    private PassengerParty party = PassengerParty.Adults(1);
+    private int passengers => party.Count;
+    public PassengerParty Passengers => party;
+    PassengerSelector passengerPopup;
     private int cabin;
     private int stopsFilter;
     private RectTransform resultsContent;
@@ -37,9 +42,23 @@ public sealed class FlightResultsPage : MonoBehaviour
     private DateSelectionPage detailsStyle;
     private TMP_Text detailsTitle;
     private readonly List<string> airlineCodes = new List<string>();
-    private int airlineFilter;
+    private readonly List<Toggle> airlineToggles=new List<Toggle>();
+    private readonly HashSet<string> selectedAirlines = new HashSet<string>();
+    private readonly List<Action> refreshFilterControls = new List<Action>();
+    private RectTransform filterChips;
+    private UnityEngine.UI.Button emptyClear;
+    private Slider priceSlider, durationSlider;
+    private TMP_Text priceLimitLabel, durationLimitLabel;
+    private DateSelectionPage filterStyle;
+    public int VisibleResultCount { get; private set; }
+    public IReadOnlyCollection<string> SelectedAirlines => selectedAirlines;
+    public int MaximumDurationMinutes => durationFilter;
+    private static readonly string[] StopsOptions = { "Any", "Nonstop", "1 stop or fewer", "2 stops or fewer" };
     private int timeFilter;
-    private const int NoPriceLimit = 2000;
+    private static readonly string[] TimeOptions = { "Any time", "Morning · 6–12", "Afternoon · 12–18", "Evening · 18–24", "Night · 0–6" };
+    private const int NoPriceLimit = int.MaxValue;
+    private int PriceUpperBound => Math.Max(2000,(int)Math.Ceiling((flights.Count==0?2000:flights.Max(FareFor))/100d)*100+100);
+    private bool refreshingFilterControls;
     private int maximumPrice = NoPriceLimit;
     private int? lowestVisibleFare;
     private int durationFilter;
@@ -123,6 +142,7 @@ public sealed class FlightResultsPage : MonoBehaviour
         public string Id { get; }
         public string Code { get; }
         public string Airline { get; }
+        public string CarrierLabel => FlightResultsPage.CarrierLabel(Airline,Segments);
         public string Departure => Segments.Count>0 ? Segments[0].DepartureLabel : Clock((int)DepartureTime.TotalMinutes);
         public string Arrival { get; private set; }
         public int DurationMinutes { get; private set; }
@@ -139,74 +159,25 @@ public sealed class FlightResultsPage : MonoBehaviour
         internal TMP_Text PriceLabel { get; set; }
         internal TMP_Text TimesLabel, StopsLabel, DurationLabelView, AirportLabel, TotalLabel;
         public BaggageAllowance Baggage { get; }
-        internal int ExpectedSegmentCount => stopCount+1;
-        readonly int stopCount;
-        readonly float durationFactor;
-        readonly int layoverMinutes;
-        readonly int scheduleIndex;
-
-        internal Flight(string code, string airline, string departure, int price, int index, int stops=0, float factor=1f, int layover=80)
+        public int MockOptionIndex { get; }
+        internal Flight(string id,string code,string airline,int departure,int price,int index,IReadOnlyList<Segment> segments,IReadOnlyList<Layover> layovers)
         {
-            Code=code; Airline=airline; Price=price; scheduleIndex=index; Id=code+"-"+(100+index);
-            stopCount=stops; durationFactor=factor; layoverMinutes=layover;
-            Baggage = new BaggageAllowance(true, index % 3 == 1 ? 1 : 0, index % 3 == 2 ? 0 : 35 + index % 3 * 5);
-            DepartureTime=DateTime.ParseExact(departure,"h:mm tt",CultureInfo.InvariantCulture).TimeOfDay;
-        }
-
-        internal void ConfigureRoute(TravelApp.FlightMap.FlightLocation from, TravelApp.FlightMap.FlightLocation to,DateTime travelDate)
-        {
-            string origin=from?.code ?? "JFK", destination=to?.code ?? "LAX";
-            double km=from!=null && to!=null ? TravelApp.FlightMap.FlightGeoMath.GreatCircleDistanceKm(from,to) : 3974;
-            int direct=Math.Max(75,(int)Math.Round((45+km/850*60)*durationFactor/5)*5);
-            // Deterministic intermediate airports; never duplicate an endpoint or another connection.
-            var hubs=new[]{"ORD","ATL","DFW","LHR","AMS","DXB","SIN","SEA","DEN","HND"}
-                .Where(code=>code!=origin && code!=destination).Select(TravelApp.FlightMap.TravelLocationCatalog.Find).Where(h=>h!=null)
-                .OrderBy(h=>from!=null && to!=null ? TravelApp.FlightMap.FlightGeoMath.GreatCircleDistanceKm(from,h)+TravelApp.FlightMap.FlightGeoMath.GreatCircleDistanceKm(h,to) : 0)
-                .Take(stopCount).ToArray();
-            var airports=new[]{origin}.Concat(hubs.Select(h=>h.code)).Concat(new[]{destination}).ToArray();
-            var segments=new List<Segment>(); var connections=new List<Layover>();
-            DateTime start=TravelApp.FlightMap.AirportClock.ToUtc(travelDate.Date.Add(DepartureTime),origin);
-            DateTime departureUtc=start;
-            var points=new[]{from ?? TravelApp.FlightMap.TravelLocationCatalog.Find(origin)}.Concat(hubs)
-                .Concat(new[]{to ?? TravelApp.FlightMap.TravelLocationCatalog.Find(destination)}).ToArray();
-            var distances=Enumerable.Range(0,points.Length-1).Select(i=>TravelApp.FlightMap.FlightGeoMath.GreatCircleDistanceKm(points[i],points[i+1])).ToArray();
-            double totalDistance=Math.Max(1,distances.Sum());
-            int flying=stopCount==0 ? direct : Math.Max(direct,(int)Math.Round((45*(stopCount+1)+totalDistance/850*60)*durationFactor/5)*5);
-            int flown=0;
-            for(int i=0;i<airports.Length-1;i++)
-            {
-                int length=i==airports.Length-2 ? flying-flown : (int)Math.Round(flying*distances[i]/totalDistance);
-                flown+=length;
-                segments.Add(new Segment(airports[i],airports[i+1],Airline,Code+" "+(1000+scheduleIndex*10+i),start,start.AddMinutes(length),travelDate));
-                start=start.AddMinutes(length);
-                if(i<hubs.Length) { int wait=layoverMinutes+i*25; connections.Add(new Layover(hubs[i].code,hubs[i].city,wait)); start=start.AddMinutes(wait); }
-            }
-            Segments=segments.AsReadOnly(); Layovers=connections.AsReadOnly();
-            DurationMinutes=(int)(start-departureUtc).TotalMinutes; Arrival=Segments[Segments.Count-1].ArrivalLabel;
+            Id=id;Code=code;Airline=airline;Price=price;MockOptionIndex=index;DepartureTime=TimeSpan.FromMinutes(departure);
+            Segments=segments;Layovers=layovers;DurationMinutes=(int)(segments.Last().ArrivalUtc-segments.First().DepartureUtc).TotalMinutes;Arrival=segments.Last().ArrivalLabel;
+            Baggage=new BaggageAllowance(true,index%3==1?1:0,index%3==2?0:35+index%3*5);
         }
     }
 
+    // The marketed airline plus any partner that operates a leg, e.g. "ANA + JetBlue".
+    public static string CarrierLabel(string airline,IEnumerable<Segment> segments)
+    {
+        var partners=segments.Select(s=>s.Airline).Where(a=>!string.IsNullOrEmpty(a) && a!=airline).Distinct().ToArray();
+        return partners.Length==0 ? airline : airline+" + "+string.Join(" + ",partners);
+    }
     public static string DurationLabel(int minutes) => $"{minutes/60}h {minutes%60:00}m";
     public static string Clock(int minutes) => DateTime.Today.AddMinutes(minutes%1440).ToString("h:mm tt",CultureInfo.InvariantCulture) +
         (minutes>=1440 ? $" (+{minutes/1440} day{(minutes/1440==1 ? "" : "s")})" : "");
-
-    private static IEnumerable<Flight> CreateSchedule()
-    {
-        yield return new Flight("B6","JetBlue","8:30 PM",189,0);
-        yield return new Flight("DL","Delta Air Lines","6:00 AM",249,1);
-        yield return new Flight("AA","American Airlines","2:15 PM",312,2);
-        yield return new Flight("UA","United Airlines","11:00 AM",425,3);
-        yield return new Flight("B6","JetBlue","7:10 AM",218,4,1,1f,80);
-        yield return new Flight("DL","Delta Air Lines","9:20 AM",279,5,0,.94f);
-        yield return new Flight("AA","American Airlines","5:40 AM",168,6,1,1.04f,95);
-        yield return new Flight("UA","United Airlines","5:35 PM",238,7,1,.98f,65);
-        yield return new Flight("DL","Delta Air Lines","10:25 PM",289,8,1,1.07f,110);
-        yield return new Flight("AA","American Airlines","7:45 PM",359,9,0,1.08f);
-        yield return new Flight("B6","JetBlue","12:10 PM",199,10,2,1.12f,75);
-        yield return new Flight("UA","United Airlines","8:00 AM",460,11,1,.95f,55);
-    }
-
-    public static int ExpectedSegments(string itineraryId) => CreateSchedule().FirstOrDefault(f=>f.Id==itineraryId)?.ExpectedSegmentCount ?? 1;
+    public static int ExpectedSegments(string itineraryId)=>MockFlightGenerator.ExpectedSegments(itineraryId);
 
     public void Build(DateSelectionPage style, Action editDestination, Action editDates, Action back = null)
     {
@@ -227,10 +198,12 @@ public sealed class FlightResultsPage : MonoBehaviour
         background.raycastTarget = false;
 
         var summary = style.Panel("Trip summary", transform, 60, 62, 1416, 112);
-        style.Shape("Trip badge", summary, 34, 25, 60, 60, PaleBlue);
-        Text("Trip badge label", summary, 34, 25, 60, 60, "TO", 18, Blue, true);
-        route = Text("Destination", summary, 118, 21, 1010, 36, "", 26, Ink, true, TextAlignmentOptions.Left);
-        dates = Text("Travel dates", summary, 118, 59, 1010, 32, "", 20, Muted, false, TextAlignmentOptions.Left);
+        // The page header already names the whole trip; this card names only the leg being chosen.
+        returnLeg = back != null;
+        route = Text("Destination", summary, 34, 21, 960, 36, "", 26, Ink, true, TextAlignmentOptions.Left);
+        route.gameObject.SetActive(false);
+        legTitle = Text("Leg title", summary, 34, 21, 960, 36, "", 26, Ink, true, TextAlignmentOptions.Left);
+        dates = Text("Travel dates", summary, 34, 59, 960, 32, "", 20, Muted, false, TextAlignmentOptions.Left);
         var modify = style.Control("Modify Search", summary, 1018, 27, 208, 56,
             back == null ? "Modify Search" : "Departure seats", PaleBlue, Blue, 21, 1.6f);
         var filters = style.Control("Filters", summary, 1242, 27, 136, 56,
@@ -243,13 +216,16 @@ public sealed class FlightResultsPage : MonoBehaviour
         var sortButton = style.Control("Sort", transform, 1220, 197, 256, 50,
             "Sort: Cheapest", PaleBlue, Blue, 19, 1.6f);
 
+        filterStyle=style;
+        BuildFilterChips(style);
         BuildResultsScroll(style);
         // Stable schedule IDs distinguish different itineraries from the same airline.
-        foreach(var flight in CreateSchedule()) AddFlight(style,flight);
-        foreach(var code in flights.Select(f=>f.Code).Distinct()) airlineCodes.Add(code);
+
         ConfigureFlightRoutes("JFK", "LAX");
         BuildFlightDetails(style);
         BuildMenus(style, modify, filters, sortButton, editDestination, editDates, back);
+        emptyClear=style.Control("Clear empty filters",transform,590,382,350,48,"Clear filters and show all flights",PaleBlue,Blue,19,2);
+        emptyClear.onClick.AddListener(ClearFilters);
         RefreshResults();
     }
 
@@ -259,27 +235,30 @@ public sealed class FlightResultsPage : MonoBehaviour
         bool sameTrip = route.text == routeLabel && this.travelDates == travelDates && routeTravelDate==nextDate;
         routeTravelDate=nextDate;
         route.text = routeLabel;
+        legTitle.text = (returnLeg ? "Return flight" : "Departure flight") +
+            (departureDate.HasValue ? "  ·  " + nextDate.ToString("dddd, MMM d", CultureInfo.InvariantCulture) : "");
         this.travelDates = travelDates;
         if (sameTrip)
         {
-            RefreshTripDetails();
+            RefreshResults();
             return;
         }
         var endpoints=routeLabel.Split('→');
         ConfigureFlightRoutes(endpoints.Length==2 ? endpoints[0].Trim() : "JFK", endpoints.Length==2 ? endpoints[1].Trim() : "LAX");
         resultsScroll.verticalNormalizedPosition=1;
         SelectedDeparture = null;
+        RefreshSelectionButtons();
         if (selectedButtonLabel != null)
             selectedButtonLabel.text = "Select";
         selectedButtonLabel = null;
-        RefreshTripDetails();
+        RefreshResults();
     }
 
-    internal void RestoreOptions(int count, string cabinName, string airlineCode, string itineraryId = null)
+    internal void RestoreOptions(int count, string cabinName, string airlineCode, string itineraryId = null, PassengerParty passengerParty = null)
     {
-        passengers = Mathf.Clamp(count, 1, 6);
+        party = PassengerParty.Restore(passengerParty,count);
         cabin = Mathf.Max(0, Array.IndexOf(Cabins, cabinName));
-        SelectedDeparture = !string.IsNullOrEmpty(itineraryId) ? flights.Find(flight => flight.Id == itineraryId) : flights.Find(flight => flight.Code == airlineCode);
+        SelectedDeparture = !string.IsNullOrEmpty(itineraryId) ? flights.Find(flight => flight.Id==itineraryId) : flights.Find(flight => flight.Code == airlineCode);
         if (selectedButtonLabel != null) selectedButtonLabel.text = "Select";
         selectedButtonLabel = null;
         if (SelectedDeparture != null)
@@ -288,6 +267,7 @@ public sealed class FlightResultsPage : MonoBehaviour
                 .FirstOrDefault(label => label.transform.parent.name == "Select");
             if (selectedButtonLabel != null) selectedButtonLabel.text = "Selected";
         }
+        RefreshSelectionButtons();
         foreach (var button in GetComponentsInChildren<UnityEngine.UI.Button>(true))
         {
             if (button.name == "Passengers") button.GetComponentInChildren<TMP_Text>().text = "Passengers: " + passengers;
@@ -299,7 +279,7 @@ public sealed class FlightResultsPage : MonoBehaviour
 
     internal void SetBookingOptions(int count,string cabinName)
     {
-        passengers=Mathf.Clamp(count,1,6);
+        if(count!=passengers)party=PassengerParty.Adults(count);
         cabin=Mathf.Max(0,Array.IndexOf(Cabins,cabinName));
         foreach(var button in GetComponentsInChildren<UnityEngine.UI.Button>(true))
         {
@@ -309,9 +289,16 @@ public sealed class FlightResultsPage : MonoBehaviour
         RefreshResults();
     }
 
+    public bool SetPassengerCategories(int adults,int children,int infantsInSeat,int infantsOnLap)
+    {
+        if(!party.SetCounts(adults,children,infantsInSeat,infantsOnLap))return false;
+        RefreshResults();return true;
+    }
+    internal void UsePassengers(PassengerParty value) {party=value;RefreshResults();}
+
     public void CopyBookingOptions(FlightResultsPage departureResults)
     {
-        passengers = departureResults.passengers;
+        party = departureResults.party;
         cabin = departureResults.cabin;
         RefreshResults();
     }
@@ -326,14 +313,26 @@ public sealed class FlightResultsPage : MonoBehaviour
         flights.Add(flight);
         // Restrict the existing wing photograph to an accent strip; information stays on white.
         var accent=style.Shape("Aviation accent",card,0,0,180,180,Card,1.6f);
-        var texture=Resources.Load<Texture2D>("FlightWings/"+flight.Code);
-        if(texture!=null)
+        // Prefer a photo of where this flight lands; fall back to the wing photos for other cities.
+        var destinationPhoto=DestinationPhotos.ForAirport(flight.Segments.Count>0?flight.Segments[flight.Segments.Count-1].DestinationCode:null);
+        var texture=destinationPhoto!=null?null:Resources.Load<Texture2D>("FlightWings/"+flight.Code)??Resources.Load<Texture2D>("FlightWings/"+new[]{"B6","DL","AA","UA"}[flight.MockOptionIndex%4]);
+        if(destinationPhoto!=null)
+        {
+            var photo=new GameObject("Destination photo",typeof(RectTransform),typeof(Image));photo.layer=card.gameObject.layer;
+            var rect=(RectTransform)photo.transform;rect.SetParent(accent,false);rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
+            var image=photo.GetComponent<Image>();image.sprite=destinationPhoto;image.preserveAspect=false;image.raycastTarget=false;
+            var fitter=photo.AddComponent<AspectRatioFitter>();fitter.aspectMode=AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio=destinationPhoto.rect.width/Mathf.Max(1,destinationPhoto.rect.height);
+            accent.gameObject.AddComponent<RectMask2D>();
+        }
+        else if(texture!=null)
         {
             AddBackdropLayer(accent,"Wing photo",texture,Color.white);
             AddBackdropLayer(accent,"Navy shading",cardShading,Color.white);
         }
         AirlineLogo.Build(style,card,200,20,106,42,flight.Code);
-        Text("Airline",card,322,22,390,36,flight.Airline,23,Ink,true,TextAlignmentOptions.Left);
+        var airlineName=Text("Airline",card,322,22,390,36,flight.CarrierLabel,23,Ink,true,TextAlignmentOptions.Left);
+        airlineName.enableAutoSizing=true; airlineName.fontSizeMin=17; airlineName.fontSizeMax=23; airlineName.overflowMode=TextOverflowModes.Ellipsis;
         flight.TimesLabel=Text("Flight times",card,200,68,470,38,"",26,Ink,true,TextAlignmentOptions.Left);
         flight.TimesLabel.enableAutoSizing=true; flight.TimesLabel.fontSizeMin=19; flight.TimesLabel.fontSizeMax=26;
         flight.AirportLabel=Text("Airports",card,200,111,470,28,"",19,Muted,false,TextAlignmentOptions.Left);
@@ -348,7 +347,7 @@ public sealed class FlightResultsPage : MonoBehaviour
         DropdownChevron.Attach(detail).PointRight();
         detail.onClick.AddListener(()=>ShowFlightDetails(flight));
         flight.PriceLabel=Text("Price",card,1188,23,196,42,"",32,Ink,true,TextAlignmentOptions.Right);
-        Text("Fare type",card,1188,65,196,24,"per traveler",16,Muted,false,TextAlignmentOptions.Right);
+        Text("Fare type",card,1188,65,196,24,"per adult",16,Muted,false,TextAlignmentOptions.Right);
         flight.TotalLabel=Text("Traveler total",card,1138,93,246,24,"",16,Muted,false,TextAlignmentOptions.Right);
         var select=style.Control("Select",card,1266,125,118,44,"Select",Blue,Color.white,20,1.8f);
         var label = select.GetComponentInChildren<TMP_Text>();
@@ -359,9 +358,23 @@ public sealed class FlightResultsPage : MonoBehaviour
             selectedButtonLabel = label;
             selectedButtonLabel.text = "Selected";
             SelectedDeparture = flight;
+            RefreshSelectionButtons();
             RefreshTripDetails();
             DepartureSelected?.Invoke();
         });
+    }
+
+    private void RefreshSelectionButtons()
+    {
+        foreach(var flight in flights)
+        {
+            if(flight.CardView==null)continue;
+            var button=flight.CardView.GetComponentsInChildren<UnityEngine.UI.Button>(true).First(b=>b.name=="Select");
+            bool selected=ReferenceEquals(flight,SelectedDeparture);
+            button.targetGraphic.color=selected || SelectedDeparture==null ? Blue : new Color32(232,236,243,255);
+            var label=button.GetComponentInChildren<TMP_Text>();label.text=selected?"Selected":"Select";
+            label.color=selected || SelectedDeparture==null?Color.white:Ink;
+        }
     }
 
     private void BuildMenus(DateSelectionPage style, UnityEngine.UI.Button modify, UnityEngine.UI.Button filters,
@@ -371,8 +384,11 @@ public sealed class FlightResultsPage : MonoBehaviour
         editMenu.GetComponent<Image>().raycastTarget = true;
         AddMenuButton(style, editMenu, 16, "Edit destination", editDestination);
         AddMenuButton(style, editMenu, 68, "Edit departure and return dates", editDates);
-        AddChoice(style, editMenu, 120, "Passengers", new[] { "1", "2", "3", "4", "5", "6" },
-            index => { passengers = index + 1; RefreshResults(); }, () => passengers - 1);
+        var passengerButton=style.Control("Passengers",editMenu,16,120,448,44,"Travelers",PaleBlue,Blue,19,2);
+        var passengerMenu=style.Panel("Result traveler choices",transform,1028,181,448,474);
+        passengerMenu.GetComponent<Image>().raycastTarget=true;
+        passengerPopup=passengerMenu.gameObject.AddComponent<PassengerSelector>();passengerPopup.Build(style,passengerMenu,this,CloseMenu);
+        BindMenu(passengerButton,(RectTransform)passengerMenu.parent);
         AddChoice(style, editMenu, 172, "Cabin", Cabins, index => { cabin = index; RefreshResults(); }, () => cabin);
         AddMenuButton(style, editMenu, 224, "Done", CloseMenu);
         if (back == null)
@@ -383,18 +399,42 @@ public sealed class FlightResultsPage : MonoBehaviour
             modify.onClick.AddListener(() => back());
         }
 
-        var filterMenu = style.Panel("Filters menu", transform, 996, 181, 480, 360);
+        var filterMenu = style.Panel("Filters menu", transform, 796, 181, 680, 568);
         filterMenu.GetComponent<Image>().raycastTarget = true;
-        AddChoice(style, filterMenu, 16, "Stops", new[] { "Any", "Nonstop", "1 stop or fewer", "2 stops or fewer" },
-            index => { stopsFilter = index; RefreshResults(); });
-        AddChoice(style, filterMenu, 68, "Airline", new[] { "Any" }.Concat(airlineCodes.Select(code=>flights.First(f=>f.Code==code).Airline)).ToArray(),
-            index => { airlineFilter = index; RefreshResults(); });
-        AddChoice(style, filterMenu, 120, "Departure time", new[] { "Any", "12 AM–12 PM", "12 PM–6 PM", "6 PM–12 AM" },
-            index => { timeFilter = index; RefreshResults(); });
-        AddMaximumPriceSlider(style, filterMenu);
-        AddChoice(style, filterMenu, 242, "Maximum duration", new[] { "Any", "6h", "9h", "15h" },
-            index => { durationFilter = index; RefreshResults(); });
-        AddMenuButton(style, filterMenu, 294, "Done", CloseMenu);
+        Text("Filters title",filterMenu,20,14,400,34,"Refine flights",24,Ink,true,TextAlignmentOptions.Left);
+        Text("Stops label",filterMenu,20,60,620,26,"Stops",18,Ink,true,TextAlignmentOptions.Left);
+        ChoiceRow(style,filterMenu,"Stops",94,StopsOptions,()=>stopsFilter,value=>stopsFilter=value);
+        Text("Airlines label",filterMenu,20,147,620,26,"Airlines · all included when none checked",18,Ink,true,TextAlignmentOptions.Left);
+        for(int i=0;i<4;i++)
+        {
+            int slot=i;string code=i<airlineCodes.Count?airlineCodes[i]:"";string airline=flights.FirstOrDefault(f=>f.Code==code)?.Airline??"";
+            float x=20+(i%2)*330, y=180+(i/2)*42;
+            var toggle=style.Shape("Airline "+code,filterMenu,x,y,310,36,PaleBlue,2).gameObject.AddComponent<Toggle>();
+            toggle.GetComponent<Image>().raycastTarget=true;
+            var box=style.Shape("Checkbox",toggle.transform,8,7,22,22,Color.white,3);
+            box.GetComponent<Image>().sprite=null;
+            var check=style.Shape("Check",box,4,4,14,14,Blue,3);
+            check.GetComponent<Image>().sprite=null;
+            toggle.targetGraphic=box.GetComponent<Image>(); toggle.graphic=check.GetComponent<Image>();
+            toggle.SetIsOnWithoutNotify(selectedAirlines.Contains(code));
+            Text("Airline name",toggle.transform,42,0,260,36,airline,18,Ink,false,TextAlignmentOptions.MidlineLeft);
+            airlineToggles.Add(toggle);
+            toggle.onValueChanged.AddListener(value=>{if(slot>=airlineCodes.Count)return;string chosen=airlineCodes[slot];if(value)selectedAirlines.Add(chosen);else selectedAirlines.Remove(chosen);RefreshResults();});
+            refreshFilterControls.Add(()=>{
+                bool visible=slot<airlineCodes.Count;toggle.gameObject.SetActive(visible);if(!visible)return;
+                string chosen=airlineCodes[slot];toggle.name="Airline "+chosen;
+                toggle.transform.Find("Airline name").GetComponent<TMP_Text>().text=flights.First(f=>f.Code==chosen).Airline;
+                toggle.SetIsOnWithoutNotify(selectedAirlines.Contains(chosen));});
+        }
+        Text("Departure label",filterMenu,20,268,620,26,"Departure · airport-local time",18,Ink,true,TextAlignmentOptions.Left);
+        ChoiceRow(style,filterMenu,"Departure",296,TimeOptions,()=>timeFilter,value=>timeFilter=value);
+        priceLimitLabel=Text("Maximum fare label",filterMenu,20,354,620,28,"",18,Ink,false,TextAlignmentOptions.Left);
+        priceSlider=FilterSlider(style,filterMenu,"Maximum fare",390,50,PriceUpperBound,PriceUpperBound,value=>maximumPrice=value>=(priceSlider==null?PriceUpperBound:priceSlider.maxValue)?NoPriceLimit:value);
+        durationLimitLabel=Text("Maximum duration label",filterMenu,20,430,620,28,"",18,Ink,false,TextAlignmentOptions.Left);
+        durationSlider=FilterSlider(style,filterMenu,"Maximum duration",466,60,MaximumAvailableDuration,MaximumAvailableDuration,value=>durationFilter=value>=MaximumAvailableDuration?0:value);
+        var clear=style.Control("Clear Filters",filterMenu,20,510,300,42,"Clear filters",PaleBlue,Blue,19,2);
+        clear.onClick.AddListener(ClearFilters);
+        style.Control("Done",filterMenu,340,510,300,42,"Done",Blue,Color.white,19,2).onClick.AddListener(CloseMenu);
         BindMenu(filters, (RectTransform)filterMenu.parent);
 
         var sortMenu = style.Panel("Sort menu", transform, 996, 254, 480, 186);
@@ -414,31 +454,80 @@ public sealed class FlightResultsPage : MonoBehaviour
         BindMenu(sortButton, (RectTransform)sortMenu.parent);
     }
 
-    private void AddMaximumPriceSlider(DateSelectionPage style, Transform menu)
+    private int MaximumAvailableDuration => Math.Max(120,(int)Math.Ceiling((flights.Count==0?120:flights.Max(f=>f.DurationMinutes))/60.0)*60);
+
+    private void ChoiceRow(DateSelectionPage style,Transform parent,string name,float y,string[] choices,Func<int> current,Action<int> assign)
     {
-        var label = Text("Maximum fare label", menu, 16, 171, 445, 30,
-            "Max fare per traveler: Any", 19, Ink, false, TextAlignmentOptions.Left);
-        var track = style.Shape("Maximum fare", menu, 29, 204, 419, 28, PaleBlue, 3);
-        track.GetComponent<Image>().raycastTarget = true;
-        var handle = style.Shape("Handle", track, 0, 0, 24, 28, Blue, 3);
-        handle.anchorMin = handle.anchorMax = new Vector2(0, 0.5f);
-        handle.pivot = new Vector2(0.5f, 0.5f);
-        handle.anchoredPosition = Vector2.zero;
-        var slider = track.gameObject.AddComponent<Slider>();
-        slider.handleRect = handle;
-        slider.targetGraphic = handle.GetComponent<Image>();
-        slider.minValue = 100;
-        slider.maxValue = NoPriceLimit;
-        slider.wholeNumbers = true;
-        slider.SetValueWithoutNotify(maximumPrice);
-        slider.onValueChanged.AddListener(value =>
+        for(int i=0;i<choices.Length;i++)
         {
-            maximumPrice = (int)value;
-            label.text = maximumPrice == NoPriceLimit
-                ? "Max fare per traveler: Any"
-                : $"Max fare per traveler: ${maximumPrice:N0}";
-            RefreshResults();
-        });
+            int value=i;
+            string caption=name=="Departure" ? new[]{"Any time","Morning\n6 AM–12 PM","Afternoon\n12 PM–6 PM","Evening\n6 PM–12 AM","Night\n12 AM–6 AM"}[i] : choices[i];
+            var button=style.Control(name+" "+choices[i],parent,20+i*(640f/choices.Length),y,640f/choices.Length-8,name=="Departure"?48:40,caption,PaleBlue,Blue,16,2);
+            button.onClick.AddListener(()=>{assign(value);RefreshResults();});
+            refreshFilterControls.Add(()=>{
+                button.GetComponent<Image>().color=current()==value?Blue:PaleBlue;
+                button.GetComponentInChildren<TMP_Text>().color=current()==value?Color.white:Blue;
+            });
+        }
+    }
+
+    private Slider FilterSlider(DateSelectionPage style,Transform parent,string name,float y,int min,int max,int value,Action<int> assign)
+    {
+        var track=style.Shape(name,parent,32,y,596,24,PaleBlue,3);
+        track.GetComponent<Image>().raycastTarget=true;
+        var handle=style.Shape("Handle",track,0,0,24,28,Blue,3);
+        handle.anchorMin=handle.anchorMax=new Vector2(0,.5f);handle.pivot=new Vector2(.5f,.5f);handle.anchoredPosition=Vector2.zero;handle.sizeDelta=new Vector2(24,0);
+        var slider=track.gameObject.AddComponent<Slider>();slider.handleRect=handle;slider.targetGraphic=handle.GetComponent<Image>();
+        slider.minValue=min;slider.maxValue=max;slider.wholeNumbers=true;slider.SetValueWithoutNotify(value);
+        slider.onValueChanged.AddListener(v=>{if(refreshingFilterControls)return;assign((int)v);RefreshResults();});
+        return slider;
+    }
+
+    public void ClearFilters()
+    {
+        stopsFilter=0;selectedAirlines.Clear();timeFilter=0;maximumPrice=NoPriceLimit;durationFilter=0;
+        RefreshResults();
+    }
+
+    private void BuildFilterChips(DateSelectionPage style)
+    {
+        var viewport=style.Shape("Active filters",transform,60,245,1416,30,Color.clear);
+        viewport.GetComponent<Image>().raycastTarget=true;viewport.gameObject.AddComponent<RectMask2D>();
+        filterChips=CreateRect("Filter chips",viewport);
+        filterChips.anchorMin=filterChips.anchorMax=filterChips.pivot=Vector2.up;
+        var scroll=viewport.gameObject.AddComponent<ScrollRect>();scroll.viewport=viewport;scroll.content=filterChips;
+        scroll.horizontal=true;scroll.vertical=false;scroll.movementType=ScrollRect.MovementType.Clamped;scroll.scrollSensitivity=35;
+    }
+
+    private void RefreshFilterControls()
+    {
+        refreshingFilterControls=true;
+        foreach(var refresh in refreshFilterControls) refresh();
+        if(priceSlider!=null)
+        {
+            priceSlider.maxValue=Math.Max(PriceUpperBound,maximumPrice==NoPriceLimit?0:maximumPrice+100);
+            priceSlider.SetValueWithoutNotify(maximumPrice==NoPriceLimit?(int)priceSlider.maxValue:maximumPrice);
+            priceLimitLabel.text=maximumPrice==NoPriceLimit?"Maximum price per adult · Any":$"Maximum price per adult · ${maximumPrice:N0}";
+            durationSlider.maxValue=MaximumAvailableDuration;
+            durationSlider.SetValueWithoutNotify(durationFilter==0?MaximumAvailableDuration:durationFilter);
+            durationLimitLabel.text=durationFilter==0?"Maximum duration · Any (up to "+DurationLabel(MaximumAvailableDuration)+")":"Maximum duration · "+DurationLabel(durationFilter);
+        }
+        refreshingFilterControls=false;
+        if(filterChips==null)return;
+        foreach(Transform child in filterChips){child.gameObject.SetActive(false);Destroy(child.gameObject);}
+        float x=0;
+        void Chip(string caption,Action remove)
+        {
+            float width=Mathf.Clamp(caption.Length*7.5f+36,110,255);
+            var button=filterStyle.Control("Remove "+caption,filterChips,x,0,width,28,caption+"  ×",PaleBlue,Blue,15,2);
+            button.onClick.AddListener(()=>{remove();RefreshResults();});x+=width+8;
+        }
+        if(stopsFilter>0)Chip(StopsOptions[stopsFilter],()=>stopsFilter=0);
+        foreach(string code in airlineCodes.Where(selectedAirlines.Contains)) {string chosen=code;Chip(flights.First(f=>f.Code==chosen).Airline,()=>selectedAirlines.Remove(chosen));}
+        if(timeFilter>0)Chip(TimeOptions[timeFilter],()=>timeFilter=0);
+        if(maximumPrice!=NoPriceLimit)Chip("Up to $"+maximumPrice,()=>maximumPrice=NoPriceLimit);
+        if(durationFilter>0)Chip("Up to "+DurationLabel(durationFilter),()=>durationFilter=0);
+        filterChips.sizeDelta=new Vector2(x,30);
     }
 
     private static UnityEngine.UI.Button AddMenuButton(DateSelectionPage style, Transform menu, float y,
@@ -500,11 +589,11 @@ public sealed class FlightResultsPage : MonoBehaviour
     {
         string passengerLabel = passengers == 1 ? "1 passenger" : $"{passengers} passengers";
         string total = SelectedDeparture != null
-            ? $"Est. total ${FareFor(SelectedDeparture) * passengers:N0}"
+            ? $"Est. total ${party.TotalFare(FareFor(SelectedDeparture)):N0}"
             : lowestVisibleFare.HasValue
-                ? $"Est. total from ${lowestVisibleFare.Value * passengers:N0}"
+                ? $"Est. total from ${party.TotalFare(lowestVisibleFare.Value):N0}"
                 : "Est. total unavailable";
-        dates.text = $"{travelDates}  ·  {passengerLabel}  ·  {Cabins[cabin]}  ·  {total}";
+        dates.text = $"{passengerLabel}  ·  {Cabins[cabin]}  ·  {total}";
         BookingOptionsChanged?.Invoke();
     }
 
@@ -513,10 +602,11 @@ public sealed class FlightResultsPage : MonoBehaviour
 
     private void RefreshResults()
     {
+        passengerPopup?.Refresh();
         foreach (var flight in flights)
         {
             flight.PriceLabel.text = $"${FareFor(flight):N0}";
-            flight.TotalLabel.text=passengers>1 ? $"Est. total ${FareFor(flight)*passengers:N0} · {passengers} travelers" : "";
+            flight.TotalLabel.text=passengers>1 ? $"Est. total ${party.TotalFare(FareFor(flight)):N0} · {passengers} travelers" : "";
             flight.CardView.gameObject.SetActive(false);
         }
 
@@ -540,27 +630,30 @@ public sealed class FlightResultsPage : MonoBehaviour
         }
         resultsContent.sizeDelta = new Vector2(0,Mathf.Max(resultsScroll.viewport.rect.height,count*198-18));
         resultCount.text = count == 1 ? "1 flight found" : $"{count} flights found";
+        VisibleResultCount=count;
         emptyResults.gameObject.SetActive(count == 0);
+        if(emptyClear!=null)emptyClear.gameObject.SetActive(count==0);
+        RefreshFilterControls();
         RefreshTripDetails();
     }
 
     private bool MatchesFilters(Flight flight)
     {
         if (stopsFilter > 0 && flight.Stops > stopsFilter-1 ||
-            airlineFilter > 0 && flight.Code != airlineCodes[airlineFilter - 1])
+            selectedAirlines.Count > 0 && !selectedAirlines.Contains(flight.Code))
             return false;
 
         int hour = flight.DepartureTime.Hours;
         bool timeMatches = timeFilter switch
         {
-            1 => hour < 12,
+            1 => hour >= 6 && hour < 12,
             2 => hour >= 12 && hour < 18,
             3 => hour >= 18,
+            4 => hour < 6,
             _ => true
         };
         bool priceMatches = maximumPrice == NoPriceLimit || FareFor(flight) <= maximumPrice;
-        int maximumDuration = durationFilter == 1 ? 360 : durationFilter == 2 ? 540 : 900;
-        return timeMatches && priceMatches && (durationFilter == 0 || flight.DurationMinutes <= maximumDuration);
+        return timeMatches && priceMatches && (durationFilter == 0 || flight.DurationMinutes <= durationFilter);
     }
 
     private void ConfigureFlightRoutes(string fromLabel,string toLabel)
@@ -568,14 +661,17 @@ public sealed class FlightResultsPage : MonoBehaviour
         TravelApp.FlightMap.FlightLocation Resolve(string label) => TravelApp.FlightMap.TravelLocationCatalog.Airports.FirstOrDefault(a=>
             a.BookingDestination==label || a.code==label || label.EndsWith("("+a.code+")",StringComparison.Ordinal));
         var from=Resolve(fromLabel); var to=Resolve(toLabel);
-        foreach(var flight in flights)
+        from=from??TravelApp.FlightMap.TravelLocationCatalog.Find("JFK");to=to??TravelApp.FlightMap.TravelLocationCatalog.Find("LAX");
+        foreach(var flight in flights){flight.CardView.gameObject.SetActive(false);Destroy(flight.CardView.gameObject);}flights.Clear();
+        foreach(var flight in MockFlightGenerator.Generate(from,to,routeTravelDate))
         {
-            flight.ConfigureRoute(from,to,routeTravelDate);
+            AddFlight(filterStyle,flight);
             flight.TimesLabel.text=flight.Departure+" – "+flight.Arrival.Replace(" days)","d)").Replace(" day)","d)");
-            flight.StopsLabel.text=flight.ConnectionSummary;
-            flight.DurationLabelView.text=DurationLabel(flight.DurationMinutes);
-            flight.AirportLabel.text=flight.Segments[0].OriginCode+" → "+flight.Segments.Last().DestinationCode;
+            flight.StopsLabel.text=flight.ConnectionSummary;flight.DurationLabelView.text=DurationLabel(flight.DurationMinutes);
+            flight.AirportLabel.text=from.code+" → "+to.code;
         }
+        airlineCodes.Clear();airlineCodes.AddRange(flights.Select(f=>f.Code).Distinct());
+        selectedAirlines.RemoveWhere(code=>!airlineCodes.Contains(code));
     }
 
     private void BuildResultsScroll(DateSelectionPage style)
@@ -625,9 +721,9 @@ public sealed class FlightResultsPage : MonoBehaviour
     private void ShowFlightDetails(Flight flight)
     {
         CloseMenu();
-        detailsTitle.text=flight.Airline+" · "+flight.Segments[0].OriginCode+" → "+flight.Segments.Last().DestinationCode;
+        detailsTitle.text=flight.CarrierLabel+" · "+flight.Segments[0].OriginCode+" → "+flight.Segments.Last().DestinationCode;
         ItineraryDetailsView.Clear(detailsContent);
-        ItineraryDetailsView.Build(detailsStyle,detailsContent,972,flight,CabinClass,FareFor(flight),passengers);
+        ItineraryDetailsView.Build(detailsStyle,detailsContent,972,flight,CabinClass,FareFor(flight),passengers,null,party);
         detailsScroll.verticalNormalizedPosition=1;
         detailsOverlay.SetAsLastSibling(); detailsOverlay.gameObject.SetActive(true);
     }

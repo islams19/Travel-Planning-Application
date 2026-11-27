@@ -33,7 +33,7 @@ public class TripReviewPresentationTests
     }
     static void Select(FlightResultsPage p,string id)
     {
-        var f=Field<List<FlightResultsPage.Flight>>(p,"flights").Single(x=>x.Id==id);
+        var f=Field<List<FlightResultsPage.Flight>>(p,"flights").Single(x=>MockFlightTestData.Matches(x,id));
         Click((Transform)f.GetType().GetProperty("CardView",Private).GetValue(f),"Select");
     }
     static void Seats(SeatSelectionPage page)
@@ -62,7 +62,7 @@ public class TripReviewPresentationTests
             if(pair.Round){Select(Field<FlightResultsPage>(nav,"returnResults"),"UA-107");Seats(Field<SeatSelectionPage>(nav,"returnSeats"));}
             var review=Field<TripReviewPage>(nav,"tripReview");yield return null;Canvas.ForceUpdateCanvases();
             var outbound=nav.CurrentSeatBooking;var inbound=nav.CurrentReturnSeatBooking;
-            Assert.IsTrue(review.gameObject.activeInHierarchy);StringAssert.Contains("JFK → CUN",Text(review.transform));
+            Assert.IsTrue(review.gameObject.activeInHierarchy);StringAssert.Contains("New York (JFK) → Cancún (CUN)",Text(review.transform));
             Assert.AreEqual((outbound.FarePerTraveler+(pair.Round?inbound.FarePerTraveler:0))*2,review.GrandTotal);
             Assert.AreEqual(review.GrandTotal,review.DisplayBaseFare+review.DisplayTaxes+review.DisplayAdditionalCharges);
             var legs=review.transform.Find("Review itinerary viewport/Viewport/Legs");
@@ -101,8 +101,8 @@ public class TripReviewPresentationTests
             }
             Assert.IsTrue(nav.SaveActiveDraft().success);var saved=runtime.Services.DraftTrips.Last();nav.ResumeDraft(saved);
             Assert.AreEqual(review.GrandTotal,(outbound.FarePerTraveler+(pair.Round?inbound.FarePerTraveler:0))*2);
-            Click(review.transform,"Progress Seats");Assert.AreEqual(outbound.Flight.Id,nav.CurrentSeatBooking.Flight.Id);Assert.IsTrue(Field<SeatSelectionPage>(nav,"seatPage").gameObject.activeInHierarchy);
-            Invoke(nav,"ShowTripReview");Click(review.transform,"Continue to Payment");
+            Click(departure,"Edit seats");Assert.AreEqual(outbound.Flight.Id,nav.CurrentSeatBooking.Flight.Id);Assert.IsTrue(Field<SeatSelectionPage>(nav,"seatPage").gameObject.activeInHierarchy);
+            Invoke(nav,"ShowTripReview");PassengerTestData.Complete(nav);Click(review.transform,"Continue to Payment");
             var payment=Field<PaymentPlaceholderPage>(nav,"paymentPage");Assert.AreEqual(review.GrandTotal,payment.Booking.EstimatedTotal);
             Invoke(nav,"ShowTripReview");Click(departure,"Edit seats");Assert.IsTrue(Field<SeatSelectionPage>(nav,"seatPage").gameObject.activeInHierarchy);
             Invoke(nav,"ShowTripReview");Click(departure,"Edit flight");Assert.IsTrue(results.gameObject.activeInHierarchy);

@@ -10,6 +10,7 @@ using static DateSelectionPage;
 // A view over the existing route, calendar, and results controllers. No parallel booking values.
 public sealed class CompactFlightSearch : MonoBehaviour
 {
+    const string DatesRequired="Choose the required travel dates.", DatesPassed="Those dates have passed. Choose new travel dates.";
     static readonly Color Ink=new Color32(29,40,59,255), Muted=new Color32(96,113,139,255),
         Blue=new Color32(47,80,247,255), Pale=new Color32(235,240,255,255);
     DateSelectionPage calendar;
@@ -18,8 +19,8 @@ public sealed class CompactFlightSearch : MonoBehaviour
     Func<bool> validRoute;
     Action submit;
     RectTransform surface;
-    UnityEngine.UI.Button tripType,travelers,cabin,departure,returning,swap,search,minus,plus;
-    TMP_Text returnHeading,message,travelerCount;
+    UnityEngine.UI.Button tripType,travelers,cabin,departure,returning,swap,search;
+    TMP_Text returnHeading,message;
     GameObject openMenu;
     KeyboardFocusOrder focusOrder;
     public bool IsCalendarOpen { get; private set; }
@@ -30,7 +31,7 @@ public sealed class CompactFlightSearch : MonoBehaviour
     {
         focusOrder=gameObject.AddComponent<KeyboardFocusOrder>();
         calendar=style; options=results; origin=from; destination=to; validRoute=routeIsValid; submit=searchFlights;
-        surface=style.Panel("Trip search",transform,40,28,1456,200);
+        surface=style.Panel("Trip search",transform,40,84,1456,200);
         tripType=style.Control("Search trip type",surface,20,20,184,40,"",Pale,Blue,19,2);
         travelers=style.Control("Search travelers",surface,224,20,178,40,"",Pale,Blue,19,2);
         cabin=style.Control("Search cabin",surface,424,20,244,40,"",Pale,Blue,19,2);
@@ -44,9 +45,16 @@ public sealed class CompactFlightSearch : MonoBehaviour
         departure=style.Control("Departure date",surface,754,100,198,64,"",Pale,Ink,20,2);
         returning=style.Control("Return date",surface,968,100,198,64,"",Pale,Ink,20,2);
         departure.onClick.AddListener(()=>OpenCalendar(false)); returning.onClick.AddListener(()=>OpenCalendar(true));
+        // Date pickers look like the From/To fields beside them: white, outlined, value aligned left.
+        foreach(var field in new[]{departure,returning})
+        {
+            field.targetGraphic.color=Color.white;
+            var edge=field.gameObject.AddComponent<Outline>(); edge.effectColor=new Color32(220,228,240,255); edge.effectDistance=new Vector2(1,-1);
+            var text=field.GetComponentInChildren<TMP_Text>(); text.alignment=TextAlignmentOptions.MidlineLeft; text.margin=new Vector4(18,0,12,0); text.fontStyle=FontStyles.Normal;
+        }
         search=style.Control("Search Flights",surface,1182,100,248,64,"Search Flights",Blue,Color.white,23,1.4f);
         search.onClick.AddListener(()=>Search());
-        message=Text("Search validation",surface,20,173,1400,24,"",16,new Color32(168,49,54,255),false,TextAlignmentOptions.Left);
+        message=Text("Search validation",surface,754,173,676,24,"",16,new Color32(168,49,54,255),false,TextAlignmentOptions.Left);
         BuildMenus(style);
         focusOrder.Configure(tripType,travelers,cabin,origin.GetComponentInChildren<TMP_InputField>(true),swap,destination.GetComponentInChildren<TMP_InputField>(true),departure,returning,search);
         var dateRect=(RectTransform)calendar.transform; dateRect.SetParent(transform,false);
@@ -63,15 +71,16 @@ public sealed class CompactFlightSearch : MonoBehaviour
             return estimate.HasValue ? options.AdjustFare(estimate.Value) : (int?)null;
         });
         var popular=transform.Find("popular_destinations") as RectTransform;
-        if(popular!=null) popular.anchoredPosition=new Vector2(popular.anchoredPosition.x,-280);
+        if(popular!=null) popular.anchoredPosition=new Vector2(popular.anchoredPosition.x,-336);
         var cards=transform.Find("Scroll View") as RectTransform;
-        if(cards!=null) { cards.anchorMin=Vector2.zero; cards.anchorMax=Vector2.one; cards.offsetMin=new Vector2(20,30); cards.offsetMax=new Vector2(0,-318); }
+        if(cards!=null) { cards.anchorMin=Vector2.zero; cards.anchorMax=Vector2.one; cards.offsetMin=new Vector2(20,30); cards.offsetMax=new Vector2(0,-374); }
         origin.ContinuationChanged+=RouteChanged; destination.ContinuationChanged+=RouteChanged;
         origin.SuggestionsOpened+=CloseMenu; destination.SuggestionsOpened+=CloseMenu;
         options.BookingOptionsChanged+=Refresh; calendar.DatesChanged+=Refresh;
         Refresh();
     }
 
+    PassengerSelector passengerControl;
     TMP_Text Label(string name,float x,string value)=>Text(name,surface,x,76,324,22,value,16,Muted,true,TextAlignmentOptions.Left);
     void PlaceField(DestinationAutocomplete field,float x)
     {
@@ -93,14 +102,9 @@ public sealed class CompactFlightSearch : MonoBehaviour
         for(int i=0;i<FlightResultsPage.CabinChoices.Count;i++)
         { string value=FlightResultsPage.CabinChoices[i]; Choice(style,cabins,"Cabin "+value,16+i*52,()=>options.SetBookingOptions(options.PassengerCount,value),value); }
         Toggle(cabin,cabins);
-        var passengers=Menu(style,"Traveler choices",224,68,360,194);
-        Text("Travelers title",passengers,20,16,320,32,"Travelers",23,Ink,true,TextAlignmentOptions.Left);
-        minus=style.Control("Fewer travelers",passengers,20,64,56,48,"−",Pale,Blue,28,2);
-        plus=style.Control("More travelers",passengers,280,64,56,48,"+",Pale,Blue,28,2);
-        travelerCount=Text("Traveler count",passengers,100,64,156,48,"",25,Ink,true);
-        minus.onClick.AddListener(()=>options.SetBookingOptions(options.PassengerCount-1,options.CabinClass));
-        plus.onClick.AddListener(()=>options.SetBookingOptions(options.PassengerCount+1,options.CabinClass));
-        style.Control("Done travelers",passengers,20,132,316,44,"Done",Pale,Blue,20,2).onClick.AddListener(CloseMenu);
+        var passengers=Menu(style,"Traveler choices",224,68,448,474);
+        passengerControl=passengers.gameObject.AddComponent<PassengerSelector>();
+        passengerControl.Build(style,passengers,options,CloseMenu);
         Toggle(travelers,passengers);
     }
     RectTransform Menu(DateSelectionPage style,string name,float x,float y,float width,float height)
@@ -132,8 +136,10 @@ public sealed class CompactFlightSearch : MonoBehaviour
         tripType.GetComponentInChildren<TMP_Text>().text=(calendar.IsOneWay?"One way":"Round trip");
         travelers.GetComponentInChildren<TMP_Text>().text=options.PassengerCount+(options.PassengerCount==1?" traveler":" travelers");
         cabin.GetComponentInChildren<TMP_Text>().text=options.CabinClass;
-        departure.GetComponentInChildren<TMP_Text>().text=calendar.Departure?.ToString("ddd, MMM d",CultureInfo.InvariantCulture) ?? "Departure date";
-        returning.GetComponentInChildren<TMP_Text>().text=calendar.Return?.ToString("ddd, MMM d",CultureInfo.InvariantCulture) ?? "Return date";
+        departure.GetComponentInChildren<TMP_Text>().text=calendar.Departure?.ToString("ddd, MMM d",CultureInfo.InvariantCulture) ?? "Add date";
+        returning.GetComponentInChildren<TMP_Text>().text=calendar.Return?.ToString("ddd, MMM d",CultureInfo.InvariantCulture) ?? "Add date";
+        departure.GetComponentInChildren<TMP_Text>().color=calendar.Departure.HasValue ? Ink : Muted;
+        returning.GetComponentInChildren<TMP_Text>().color=calendar.Return.HasValue ? Ink : Muted;
         returning.gameObject.SetActive(!calendar.IsOneWay); returnHeading.gameObject.SetActive(!calendar.IsOneWay);
         ((RectTransform)departure.transform).sizeDelta=new Vector2(calendar.IsOneWay?414:198,64);
         var label=departure.GetComponentInChildren<TMP_Text>().rectTransform;
@@ -143,11 +149,8 @@ public sealed class CompactFlightSearch : MonoBehaviour
         search.GetComponentInChildren<TMP_Text>().color=search.interactable ? Color.white : Muted;
         swap.GetComponentInChildren<TMP_Text>().color=swap.interactable ? Blue : Muted;
         if(origin.CanContinue && destination.CanContinue && !validRoute()) message.text="Choose different origin and destination cities.";
-        if(travelerCount!=null) travelerCount.text=options.PassengerCount.ToString(CultureInfo.InvariantCulture);
-        if(minus!=null) minus.interactable=options.PassengerCount>1;
-        if(plus!=null) plus.interactable=options.PassengerCount<6;
-        foreach(var control in new[]{minus,plus}) if(control!=null)
-            control.GetComponentInChildren<TMP_Text>().color=control.interactable ? Blue : Muted;
+        if((message.text==DatesRequired || message.text==DatesPassed) && DatesReady) message.text="";
+        passengerControl?.Refresh();
     }
     public void Swap()
     {
@@ -166,12 +169,22 @@ public sealed class CompactFlightSearch : MonoBehaviour
     public void CloseCalendar() { IsCalendarOpen=false; if(calendar!=null) calendar.gameObject.SetActive(false); Refresh(); }
     public bool Search()
     {
-        if(!validRoute()) { message.text="Select different origin and destination cities from the suggestions."; return false; }
-        if(!calendar.Departure.HasValue || !calendar.IsOneWay && (!calendar.Return.HasValue || calendar.Return<=calendar.Departure))
-        { message.text="Choose the required travel dates."; OpenCalendar(calendar.Departure.HasValue); return false; }
+        bool fromValid=origin.ValidateAirport(),toValid=destination.ValidateAirport();
+        if(!validRoute())
+        {
+            message.text="Select different origin and destination cities from the suggestions.";
+            if(!fromValid)origin.FocusForCorrection();else {if(toValid)destination.ShowValidationError("Choose a different destination city.");destination.FocusForCorrection();}
+            return false;
+        }
+        if(calendar.Departure.HasValue && calendar.Departure.Value.Date<DateSelectionPage.Today().Date)
+        { message.text=DatesPassed; OpenCalendar(false); return false; }
+        if(!DatesReady)
+        { message.text=DatesRequired; OpenCalendar(calendar.Departure.HasValue); return false; }
         if(options.PassengerCount<1 || options.PassengerCount>6) { message.text="Choose 1–6 travelers."; return false; }
         CloseMenu(); CloseCalendar(); submit(); return true;
     }
+    bool DatesReady => calendar.Departure.HasValue && calendar.Departure.Value.Date>=DateSelectionPage.Today().Date &&
+        (calendar.IsOneWay || calendar.Return.HasValue && calendar.Return>calendar.Departure);
     void LateUpdate()
     {
         if(origin==null) return;

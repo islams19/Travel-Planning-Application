@@ -24,18 +24,7 @@ namespace TravelApp.FlightMap
 
         public static FlightPriceOffer CreateOffer(FlightLocation departure, FlightLocation destination)
         {
-            double distance = FlightGeoMath.GreatCircleDistanceKm(departure, destination);
-            int stableVariation = StableCodeValue(departure.code + destination.code) % 55;
-            int raw = Mathf.RoundToInt(64f + (float)distance * 0.045f + stableVariation);
-            int rounded = Mathf.Max(79, Mathf.RoundToInt(raw / 5f) * 5);
-            return new FlightPriceOffer(destination, rounded, "USD", true);
-        }
-
-        static int StableCodeValue(string value)
-        {
-            int result = 17;
-            foreach (char character in value) result = result * 31 + character;
-            return Mathf.Abs(result);
+            return new FlightPriceOffer(destination,MockTravelPricing.PlanningEstimate(departure,destination),"USD",true);
         }
     }
 }

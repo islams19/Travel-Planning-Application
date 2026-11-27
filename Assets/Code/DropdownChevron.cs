@@ -10,7 +10,8 @@ public sealed class DropdownChevron : MonoBehaviour, IPointerEnterHandler, IPoin
     TMP_Dropdown dropdown;
     bool hovered, pressed, expanded;
     public float BackgroundAlpha => glyph == null ? 0 : glyph.BackgroundAlpha;
-    public static DropdownChevron Attach(Selectable control)
+    // leftAligned: field-style dropdowns line their value up with neighbouring text inputs.
+    public static DropdownChevron Attach(Selectable control,bool leftAligned=false)
     {
         var existing=control.GetComponent<DropdownChevron>();
         if(existing!=null) return existing;
@@ -34,8 +35,8 @@ public sealed class DropdownChevron : MonoBehaviour, IPointerEnterHandler, IPoin
         result.glyph.color=label!=null ? label.color : new Color32(47,80,247,255);
         if(label!=null)
         {
-            label.margin=new Vector4(12,0,42,0);
-            label.alignment=TextAlignmentOptions.Center;
+            label.margin=new Vector4(leftAligned?16:12,0,42,0);
+            label.alignment=leftAligned?TextAlignmentOptions.MidlineLeft:TextAlignmentOptions.Center;
             if(result.dropdown==null)
             {
                 label.fontSizeMax=label.fontSize; label.fontSizeMin=Mathf.Max(16,label.fontSize-3);

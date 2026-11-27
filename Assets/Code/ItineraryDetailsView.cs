@@ -9,7 +9,7 @@ using UnityEngine.UI;
 public static class ItineraryDetailsView
 {
     static readonly Color Ink=new Color32(29,40,59,255),Muted=new Color32(96,113,139,255),Blue=new Color32(47,80,247,255),Pale=new Color32(235,240,255,255);
-    public static float Build(DateSelectionPage style,RectTransform parent,float width,FlightResultsPage.Flight flight,string cabin,int fare,int passengers,IReadOnlyList<IReadOnlyList<string>> seats=null)
+    public static float Build(DateSelectionPage style,RectTransform parent,float width,FlightResultsPage.Flight flight,string cabin,int fare,int passengers,IReadOnlyList<IReadOnlyList<string>> seats=null,PassengerParty party=null)
     {
         TMP_Text Label(Transform p,string name,float x,float y,float w,float h,string text,float size=19,bool bold=false,Color? color=null)
         {
@@ -59,12 +59,15 @@ public static class ItineraryDetailsView
         var baggage=style.Panel("Baggage and fare",parent,0,y,width,236);
         Label(baggage,"Baggage heading",24,18,inner,30,"Baggage",23,true);
         Label(baggage,"Baggage allowances",24,62,inner,50,flight.Baggage.Summary,18);
-        Label(baggage,"Fare summary",24,116,inner,52,$"{cabin} · ${fare:N0} per traveler\nEstimated total ${fare*passengers:N0} · {passengers} traveler{(passengers==1?"":"s")}",19,true);
+        Label(baggage,"Fare summary",24,116,inner,52,$"{cabin} · ${fare:N0} per adult\nEstimated total ${(party?.TotalFare(fare)??fare*passengers):N0} · {passengers} traveler{(passengers==1?"":"s")}",19,true);
         Label(baggage,"Baggage policy note",24,178,inner,72,FlightResultsPage.BaggageAllowance.PolicyNote,16,false,Muted);
-        float finalHeight=width<700?280:250;((RectTransform)baggage.parent).sizeDelta=new Vector2(width,finalHeight);baggage.sizeDelta=new Vector2(width-3,finalHeight-3);y+=finalHeight+18;
+        var policy=baggage.GetComponentsInChildren<TMP_Text>().First(t=>t.name=="Baggage policy note");
+        if(policy.font==null)policy.font=TMP_Settings.defaultFontAsset;
+        float policyHeight=policy.GetPreferredValues(policy.text,inner,0).y+12;policy.rectTransform.sizeDelta=new Vector2(inner,policyHeight);
+        float finalHeight=Mathf.Max(width<700?280:250,178+policyHeight+24);((RectTransform)baggage.parent).sizeDelta=new Vector2(width,finalHeight);baggage.sizeDelta=new Vector2(width-3,finalHeight-3);y+=finalHeight+18;
         var note=Label(parent,"Illustrative details",0,y,width,76,"Airport-local times. Day offsets use each airport’s local calendar date.\nAircraft, terminals and amenities are illustrative, not airline guarantees.",16,false,Muted);
         if(note.font==null)note.font=TMP_Settings.defaultFontAsset;
-        float noteHeight=note.GetPreferredValues(note.text,width,0).y+24;note.rectTransform.sizeDelta=new Vector2(width,noteHeight);y+=noteHeight;
+        float noteHeight=note.GetPreferredValues(note.text,width,0).y+24;note.rectTransform.sizeDelta=new Vector2(width,noteHeight);y+=noteHeight+48;
         parent.sizeDelta=new Vector2(0,y);return y;
     }
     public static void Clear(Transform root)

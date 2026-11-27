@@ -15,12 +15,9 @@ public sealed class SharedProfileMenu : MonoBehaviour
     private static readonly Color Blue = new Color32(47, 80, 247, 255);
     private static readonly Color Pale = new Color32(235, 240, 255, 255);
     private GameObject overlay;
-    private GameObject actions;
-    private GameObject details;
+
     private TMP_Text identity;
     private TMP_Text email;
-    private TMP_Text profileIdentity;
-    private TMP_Text profileEmail;
     private TMP_Text signOutLabel;
     private AppServices services;
     public bool IsOpen => overlay != null && overlay.activeSelf;
@@ -50,7 +47,7 @@ public sealed class SharedProfileMenu : MonoBehaviour
         blocker.color = Color.clear;
         dismiss.AddComponent<UnityEngine.UI.Button>().onClick.AddListener(Close);
 
-        var panel = style.Panel("Profile dropdown", rect, 0, 0, 380, 382);
+        var panel = style.Panel("Profile dropdown", rect, 0, 0, 380, 254);
         var outer = (RectTransform)panel.parent;
         outer.anchorMin = outer.anchorMax = outer.pivot = Vector2.one;
         outer.anchoredPosition = new Vector2(-40, -132);
@@ -58,25 +55,12 @@ public sealed class SharedProfileMenu : MonoBehaviour
         identity = Label("Signed-in name", panel, 24, 18, 332, 34, 23, Ink, true);
         email = Label("Signed-in email", panel, 24, 55, 332, 30, 18, Muted);
         style.Shape("Divider", panel, 24, 100, 332, 1.5f, new Color32(221, 228, 239, 255));
-        actions = Group("Profile actions", panel);
-        style.Control("Profile", actions.transform, 18, 115, 344, 49, "Profile", Pale, Blue, 20, 2)
-            .onClick.AddListener(ShowProfile);
-        style.Control("Settings", actions.transform, 18, 173, 344, 49, "Settings", Pale, Ink, 20, 2)
-            .onClick.AddListener(navigation.OpenSettings);
-        style.Control("Saved Trips", actions.transform, 18, 231, 344, 49, "My Trips", Pale, Ink, 20, 2)
-            .onClick.AddListener(navigation.OpenSavedTrips);
-        var signOut = style.Control("Sign Out", actions.transform, 18, 300, 344, 49, "Sign Out", Color.white,
+        style.Control("Profile", panel, 18, 115, 344, 49, "Profile", Pale, Blue, 20, 2)
+            .onClick.AddListener(() => {Close(); navigation.RequestProfile();});
+        var signOut = style.Control("Sign Out", panel, 18, 180, 344, 49, "Sign Out", Color.white,
             new Color32(166, 51, 67, 255), 20, 2);
         signOutLabel = signOut.GetComponentInChildren<TMP_Text>();
         signOut.onClick.AddListener(SignOut);
-        details = Group("Profile details", panel);
-        Text("Profile heading", details.transform, 24, 116, 332, 35, "Your profile", 23, Ink, true, TextAlignmentOptions.Left);
-        Text("Username label", details.transform, 24, 164, 332, 24, "Username", 16, Muted, false, TextAlignmentOptions.Left);
-        profileIdentity = Label("Profile username", details.transform, 24, 190, 332, 30, 20, Ink);
-        Text("Email label", details.transform, 24, 232, 332, 24, "Email", 16, Muted, false, TextAlignmentOptions.Left);
-        profileEmail = Label("Profile email", details.transform, 24, 258, 332, 30, 18, Ink);
-        style.Control("Back to profile menu", details.transform, 18, 310, 344, 49, "‹  Back", Pale, Blue, 20, 2)
-            .onClick.AddListener(() => { details.SetActive(false); actions.SetActive(true); });
         services.Changed += Refresh;
         Close();
     }
@@ -85,21 +69,21 @@ public sealed class SharedProfileMenu : MonoBehaviour
     {
         if (IsOpen) { Close(); return; }
         Refresh();
-        details.SetActive(false);
-        actions.SetActive(true);
         overlay.transform.SetAsLastSibling();
         overlay.SetActive(true);
     }
 
     public void Close() { if (overlay != null) overlay.SetActive(false); }
-    private void ShowProfile() { actions.SetActive(false); details.SetActive(true); }
     private void Refresh()
     {
-        string username = services.Accounts.Username ?? "Guest User";
+        string username = services.Accounts.DisplayName;
         string address = services.Accounts.Email;
-        identity.text = profileIdentity.text = username;
-        email.text = profileEmail.text = string.IsNullOrWhiteSpace(address) ? "Not signed in" : address;
-        signOutLabel.text = services.Accounts.IsLoggedIn ? "Sign Out" : "Sign In";
+        identity.text = username;
+        email.text = string.IsNullOrWhiteSpace(address) ? "Not signed in" : address;
+        bool signedIn = services.Accounts.IsLoggedIn;
+        signOutLabel.text = signedIn ? "Sign Out" : "Sign In";
+        // Red is reserved for leaving the account; signing in is an ordinary action.
+        signOutLabel.color = signedIn ? (Color)new Color32(166, 51, 67, 255) : Blue;
     }
 
     private void SignOut()

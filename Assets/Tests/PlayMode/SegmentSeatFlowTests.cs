@@ -28,7 +28,7 @@ public class SegmentSeatFlowTests
     static void Click(Transform root,string name)=>Button(root,name).onClick.Invoke();
     static void Select(FlightResultsPage page,string id)
     {
-        var flight=Field<List<FlightResultsPage.Flight>>(page,"flights").Single(f=>f.Id==id);
+        var flight=Field<List<FlightResultsPage.Flight>>(page,"flights").Single(f=>MockFlightTestData.Matches(f,id));
         var card=(RectTransform)typeof(FlightResultsPage.Flight).GetProperty("CardView",Private).GetValue(flight);
         Click(card,"Select");
     }
@@ -53,7 +53,7 @@ public class SegmentSeatFlowTests
         Invoke(Field<DateSelectionPage>(nav,"datePage"),"RestoreDates",(DateTime?)departure,(DateTime?)returning,false);
         Invoke(nav,"ShowFlightResults",departure,(DateTime?)returning);
         var results=Field<FlightResultsPage>(nav,"flightResults");
-        Click(results.transform,"Modify Search"); Click(results.transform,"Passengers"); Click(results.transform,"Done");
+        Click(results.transform,"Modify Search"); PassengerTestData.AddAdult(results); Click(results.transform,"Done");
         Select(results,"UA-107"); var seats=Field<SeatSelectionPage>(nav,"seatPage");
         Assert.AreEqual(2,nav.CurrentSeatBooking.SegmentSeats.Count); Assert.AreEqual(2,nav.CurrentSeatBooking.PassengerCount);
         Assert.AreEqual("JFK",nav.CurrentSeatBooking.Flight.Segments[0].OriginCode);
@@ -66,7 +66,8 @@ public class SegmentSeatFlowTests
             Assert.AreEqual((int)(segment.ArrivalUtc-segment.DepartureUtc).TotalMinutes,segment.DurationMinutes);
         }
         seats.SelectSegment(0); Click(seats.transform,"Seat 1A"); Click(seats.transform,"Seat 1B");
-        Assert.IsFalse(Button(seats.transform,"Confirm Seat").interactable,"First aircraft seats alone cannot complete a connection");
+        Assert.IsFalse(Field<UIButton>(seats,"confirm").interactable,"First aircraft seats alone cannot complete a connection");
+        Assert.IsTrue(Button(seats.transform,"Next flight seats").gameObject.activeInHierarchy,"A finished first flight offers the next flight as the single next step");
         Assert.IsTrue(nav.SaveActiveDraft().success);
         var partial=services.DraftTrips.Single(); Assert.IsFalse(partial.NeedsPayment);
         Assert.AreEqual(2,partial.outbound.segments.Length);
@@ -107,7 +108,7 @@ public class SegmentSeatFlowTests
         Assert.IsTrue(nav.CurrentSeatBooking.Confirmed); Assert.IsTrue(nav.CurrentReturnSeatBooking.Confirmed);
         foreach(var pair in nav.CurrentSeatBooking.Flight.Segments.Select((s,i)=>new{s,i}))
             Assert.AreEqual(pair.s.DepartureUtc.Ticks,ready.outbound.segments[pair.i].departureUtcTicks);
-        Invoke(nav,"ContinueToPayment"); var payment=Field<PaymentPlaceholderPage>(nav,"paymentPage");
+        PassengerTestData.Complete(nav);Invoke(nav,"ContinueToPayment"); var payment=Field<PaymentPlaceholderPage>(nav,"paymentPage");
         Assert.IsTrue(payment.gameObject.activeInHierarchy); var snapshot=payment.Booking;
         Assert.AreEqual(2,snapshot.Outbound.SegmentSeats.Count); Assert.AreEqual(2,snapshot.Return.SegmentSeats.Count);
         CollectionAssert.AreEqual(new[]{"2A","2B"},snapshot.Outbound.SegmentSeats[1]);

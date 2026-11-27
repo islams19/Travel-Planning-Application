@@ -11,6 +11,7 @@ public sealed class PaymentBooking
     public DateTime DepartureDate => Outbound.Date;
     public DateTime? ReturnDate => Return?.Date;
     public int PassengerCount { get; }
+    public PassengerParty Passengers { get; }
     public string CabinClass { get; }
     public Leg Outbound { get; }
     public Leg Return { get; }
@@ -20,18 +21,19 @@ public sealed class PaymentBooking
 
     internal PaymentBooking(SeatSelectionPage.Booking outbound, SeatSelectionPage.Booking inbound)
     {
+        Passengers=outbound.Passengers.Clone();
         Username = TravelApp.TravelAppRuntime.Instance?.Services?.Accounts.Username;
         Outbound = new Leg(outbound);
         Return = inbound == null ? null : new Leg(inbound);
         PassengerCount = outbound.PassengerCount;
         CabinClass = outbound.Cabin;
-        EstimatedTotal = (Outbound.FarePerTraveler + (Return?.FarePerTraveler ?? 0)) * PassengerCount;
+        EstimatedTotal = Passengers.TotalFare(Outbound.FarePerTraveler) + (Return==null?0:Passengers.TotalFare(Return.FarePerTraveler));
     }
 
     internal bool Matches(SeatSelectionPage.Booking outbound, SeatSelectionPage.Booking inbound)
     {
         return Username == TravelApp.TravelAppRuntime.Instance?.Services?.Accounts.Username &&
-            PassengerCount == outbound.PassengerCount && CabinClass == outbound.Cabin &&
+            UnityEngine.JsonUtility.ToJson(Passengers)==UnityEngine.JsonUtility.ToJson(outbound.Passengers) && PassengerCount == outbound.PassengerCount && CabinClass == outbound.Cabin &&
             Outbound.Matches(outbound) && (Return == null ? inbound == null : inbound != null && Return.Matches(inbound));
     }
 

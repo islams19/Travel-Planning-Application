@@ -15,6 +15,8 @@ using Object=UnityEngine.Object;
 
 public class CompactSearchFlowTests
 {
+    [SetUp] public void PinCalendar()=>CalendarClock.PinToStartOfMonth();
+    [TearDown] public void ResetCalendar()=>CalendarClock.Reset();
     sealed class MemoryStore : ISaveStore { public SaveData Load()=>new SaveData(); public void Save(SaveData data) { } }
     const BindingFlags Private=BindingFlags.Instance|BindingFlags.NonPublic;
     static T Field<T>(object target,string name)=>(T)target.GetType().GetField(name,Private).GetValue(target);
@@ -36,7 +38,7 @@ public class CompactSearchFlowTests
         Field<TMP_InputField>(search,"input").text=query;
         yield return null;
         var root=Field<RectTransform>(search,"results");
-        yield return Click(root.GetComponentsInChildren<UIButton>().Single(b=>b.GetComponentInChildren<TMP_Text>().text.Contains(text)));
+        yield return Click(root.GetComponentsInChildren<UIButton>().Single(b=>b.name==text));
     }
     static IEnumerator Day(DateSelectionPage dates,string day)=>Click(Field<UIButton[]>(dates,"dayButtons").Take(42).Single(b=>b.gameObject.activeSelf && b.GetComponentInChildren<TMP_Text>().text==day));
     AppServices original; TravelCatalog catalog;
@@ -60,15 +62,15 @@ public class CompactSearchFlowTests
         var surface=(RectTransform)pages[0].transform.Find("Trip search"); Assert.Less(surface.rect.height,((RectTransform)pages[0].transform).rect.height*.3f);
         Field<TMP_InputField>(destination,"input").text="New York";
         var labels=Field<RectTransform>(destination,"results").GetComponentsInChildren<TMP_Text>().Select(t=>t.text).ToArray();
-        Assert.IsTrue(labels.Any(t=>t.Contains("City default"))); foreach(string code in new[]{"JFK","EWR","LGA"}) Assert.IsTrue(labels.Any(t=>t.Contains(code+" —")));
-        yield return Suggest(destination,"New York","EWR —"); Assert.AreEqual("EWR",destination.SelectedAirportCode);
+        Assert.IsTrue(labels.Any(t=>t.Contains("Uses JFK"))); foreach(string code in new[]{"JFK","EWR","LGA"}) Assert.IsTrue(labels.Any(t=>t==code));
+        yield return Suggest(destination,"New York","Airport EWR"); Assert.AreEqual("EWR",destination.SelectedAirportCode);
         Assert.IsFalse(Button(pages[0].transform,"Search Flights").interactable,"Different airports in the same city are still invalid");
         Assert.IsFalse(form.Search());
-        yield return Suggest(destination,"Japan","Tokyo, Japan · City default (HND)"); Assert.AreEqual("HND",destination.SelectedAirportCode);
+        yield return Suggest(destination,"Japan","City HND"); Assert.AreEqual("HND",destination.SelectedAirportCode);
         Assert.IsFalse(form.Search()); Assert.IsTrue(form.IsCalendarOpen); Assert.IsTrue(pages[0].activeInHierarchy);
         Assert.IsTrue(dates.transform.IsChildOf(pages[0].transform)); yield return Click(dates.transform,"Close dates");
-        yield return Suggest(destination,"Narita","NRT —"); Assert.AreEqual("NRT",destination.SelectedAirportCode);
-        yield return Suggest(origin,"EWR","EWR —"); Assert.AreEqual("EWR",origin.SelectedAirportCode);
+        yield return Suggest(destination,"Narita","Airport NRT"); Assert.AreEqual("NRT",destination.SelectedAirportCode);
+        yield return Suggest(origin,"EWR","Airport EWR"); Assert.AreEqual("EWR",origin.SelectedAirportCode);
         yield return Click(pages[0].transform,"Search travelers"); yield return Click(pages[0].transform,"More travelers"); yield return Click(pages[0].transform,"More travelers");
         for(int i=0;i<3;i++) yield return Click(pages[0].transform,"More travelers");
         Assert.AreEqual(6,options.PassengerCount); Assert.IsFalse(Button(pages[0].transform,"More travelers").interactable);
@@ -96,8 +98,10 @@ public class CompactSearchFlowTests
         var flights=Field<List<FlightResultsPage.Flight>>(options,"flights");
         Assert.IsTrue(flights.All(f=>f.Segments[0].OriginCode=="EWR" && f.Segments.Last().DestinationCode=="NRT"));
         Assert.AreEqual(3,options.PassengerCount); Assert.AreEqual("Business",options.CabinClass);
-        yield return Click(options.transform,"Modify Search"); yield return Click(options.transform,"Passengers"); yield return Click(options.transform,"Cabin"); yield return Click(options.transform,"Done");
+        yield return Click(options.transform,"Modify Search"); yield return Click(options.transform,"Passengers"); yield return Click(options.transform,"More travelers"); yield return Click(options.transform,"Done travelers"); yield return Click(options.transform,"Modify Search"); yield return Click(options.transform,"Cabin"); yield return Click(options.transform,"Done");
         Field<UIButton[]>(nav,"buttons")[0].onClick.Invoke();
+        var leave=Object.FindFirstObjectByType<AppDialog>(); Assert.IsTrue(leave.IsOpen,"Leaving flight results asks first");
+        Button(leave.transform,"Leave without saving").onClick.Invoke();
         Assert.AreEqual(4,options.PassengerCount); Assert.AreEqual("First",options.CabinClass);
         StringAssert.Contains("4 travelers",Button(pages[0].transform,"Search travelers").GetComponentInChildren<TMP_Text>().text);
         StringAssert.Contains("First",Button(pages[0].transform,"Search cabin").GetComponentInChildren<TMP_Text>().text);
@@ -119,7 +123,7 @@ public class CompactSearchFlowTests
         Assert.AreEqual(departure,Field<DateTime?>(dates,"departureDate")); Assert.AreEqual(4,options.PassengerCount);
         yield return Click(pages[0].transform,"card-Tokyo"); Assert.AreEqual("HND",destination.SelectedAirportCode); Assert.IsTrue(pages[0].activeInHierarchy);
         Field<TMP_InputField>(destination,"input").text="arbitrary text"; Assert.IsNull(destination.SelectedAirportCode); Assert.IsFalse(form.Search());
-        yield return Suggest(destination,"Arab","Dubai, United Arab Emirates · City default (DXB)"); Assert.AreEqual("DXB",destination.SelectedAirportCode);
+        yield return Suggest(destination,"Arab","City DXB"); Assert.AreEqual("DXB",destination.SelectedAirportCode);
         yield return Click(pages[0].transform,"Search trip type"); yield return Click(pages[0].transform,"One way");
         Assert.IsNull(Field<DateTime?>(dates,"returnDate")); Assert.IsFalse(pages[0].GetComponentsInChildren<UIButton>().Any(b=>b.name=="Return date"));
         yield return Click(pages[0].transform,"Search Flights"); Assert.IsTrue(options.gameObject.activeInHierarchy); Assert.IsNull(Field<DateTime?>(nav,"returnDate"));

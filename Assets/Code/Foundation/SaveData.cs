@@ -5,6 +5,7 @@ namespace TravelApp
     [Serializable] public sealed class SaveData
     {
         public int version = 1;
+        public TravelPreferences guestPreferences = new TravelPreferences();
         public List<AccountData> accounts = new List<AccountData>();
         public List<TripDraft> draftTrips = new List<TripDraft>();
         public List<ReviewData> reviews = new List<ReviewData>();
@@ -12,6 +13,8 @@ namespace TravelApp
     [Serializable] public sealed class AccountData
     {
         public string username, email, salt, passwordHash;
+        public string displayName;
+        public TravelPreferences preferences = new TravelPreferences();
         public List<CartItem> cart = new List<CartItem>();
         public List<BookingData> bookings = new List<BookingData>();
     }
